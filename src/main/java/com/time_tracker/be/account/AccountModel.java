@@ -2,7 +2,7 @@ package com.time_tracker.be.account;
 
 import com.time_tracker.be.balance.BalanceModel;
 import com.time_tracker.be.common.BaseModal;
-import com.time_tracker.be.common.RoleModel;
+import com.time_tracker.be.role.RoleModel;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

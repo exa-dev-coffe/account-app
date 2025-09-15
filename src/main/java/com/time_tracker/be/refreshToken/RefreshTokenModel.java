@@ -1,14 +1,15 @@
-package com.time_tracker.be.common;
+package com.time_tracker.be.refreshToken;
 
 
 import com.time_tracker.be.account.AccountModel;
+import com.time_tracker.be.common.BaseModal;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.util.Date;
 
 @Getter
 @Setter
@@ -22,6 +23,7 @@ public class RefreshTokenModel extends BaseModal {
     @Column(name = "id")
     private int id;
 
+    @Column(name = "token", columnDefinition = "TEXT", nullable = false)
     private String token;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -29,5 +31,5 @@ public class RefreshTokenModel extends BaseModal {
     private AccountModel userId;
 
     @Column(name = "expiry_at", nullable = false)
-    private LocalDateTime expiryAt;
+    private Date expiryAt;
 }

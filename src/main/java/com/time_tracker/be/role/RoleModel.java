@@ -1,6 +1,7 @@
-package com.time_tracker.be.common;
+package com.time_tracker.be.role;
 
 
+import com.time_tracker.be.common.BaseModal;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;

@@ -71,7 +71,7 @@ public class JwtTokenProvider {
     }
 
     // Ambil email dari token
-    public String getEmail(String token) {
+    public String getEmailFromToken(String token) {
         return getClaims(token).getSubject();
     }
 
