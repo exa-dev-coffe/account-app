@@ -8,6 +8,8 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 
+import java.util.Date;
+
 @Aspect
 @Component
 public class JwtFilter {
@@ -24,7 +26,7 @@ public class JwtFilter {
         String header = request.getHeader("Authorization");
         String token = jwtTokenProvider.resolveToken(header);
 
-        if (token == null || !jwtTokenProvider.validateToken(token)) {
+        if (token == null || jwtTokenProvider.getClaims(token).getExpiration().before(new Date())) {
             throw new NotAuthorizedException("Token is not valid");
         }
 

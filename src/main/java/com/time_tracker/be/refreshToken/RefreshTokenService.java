@@ -27,7 +27,7 @@ public class RefreshTokenService {
         accountCacheDto.setId(accountModel.getUserId());
         accountCacheDto.setEmail(accountModel.getEmail());
         accountCacheDto.setFullName(accountModel.getFullName());
-        accountCacheDto.setRole(accountModel.getRoleId().getRoleName());
+        accountCacheDto.setRole(accountModel.getRole().getRoleName());
         this.redisTemplate.opsForValue().set("refreshToken:" + refreshToken, accountCacheDto);
     }
 
@@ -44,13 +44,14 @@ public class RefreshTokenService {
         if (tokenOnRedis != null) {
             return tokenOnRedis.getId() == user.getUserId() ? tokenOnRedis : null;
         }
+
         RefreshTokenModel refreshTokenModel = this.refreshTokenRepository.findByTokenAndUserId(token, user);
         if (refreshTokenModel != null) {
             AccountCacheDto accountCacheDto = new AccountCacheDto();
             accountCacheDto.setId(user.getUserId());
             accountCacheDto.setEmail(user.getEmail());
             accountCacheDto.setFullName(user.getFullName());
-            accountCacheDto.setRole(user.getRoleId().getRoleName());
+            accountCacheDto.setRole(user.getRole().getRoleName());
             this.redisTemplate.opsForValue().set("refreshToken:" + token, accountCacheDto);
             return accountCacheDto;
         } else {

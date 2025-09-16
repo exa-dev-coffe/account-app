@@ -31,7 +31,7 @@ public class AccountModel extends BaseModal {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "role_id", nullable = false)
-    private RoleModel roleId;
+    private RoleModel role;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "balance_id", nullable = true)

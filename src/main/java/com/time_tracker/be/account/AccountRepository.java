@@ -7,6 +7,10 @@ import org.springframework.stereotype.Repository;
 public interface AccountRepository extends JpaRepository<AccountModel, Integer> {
     AccountModel findByEmail(String email);
 
-    AccountModel findByEmailAndUserId(String email, Integer userId);
+    // Ambil entity langsung
+    AccountModel findByUserId(Integer userId);
+
+    // Ambil projection/DTO fleksibel
+    <T> T findByUserId(Integer userId, Class<T> type);
 
 }

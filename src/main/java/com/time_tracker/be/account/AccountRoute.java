@@ -1,19 +1,14 @@
 package com.time_tracker.be.account;
 
-import com.time_tracker.be.account.dto.LoginGoogleRequestDto;
-import com.time_tracker.be.account.dto.LoginRequestDto;
-import com.time_tracker.be.account.dto.RefreshRequestDto;
-import com.time_tracker.be.account.dto.RegisterRequestDto;
+import com.time_tracker.be.account.dto.*;
+import com.time_tracker.be.annotation.CurrentUser;
 import com.time_tracker.be.common.ResponseModel;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @Slf4j
 @RestController
@@ -36,8 +31,11 @@ public class AccountRoute {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<ResponseModel<Object>> refreshToken(@RequestBody RefreshRequestDto refreshRequestDto, HttpServletRequest request) {
-        String refreshToken = refreshRequestDto.getRefreshToken();
+    public ResponseEntity<ResponseModel<Object>> refreshToken(@RequestBody(required = false) RefreshRequestDto refreshRequestDto, HttpServletRequest request) {
+        String refreshToken = null;
+        if (refreshRequestDto != null) {
+            refreshToken = refreshRequestDto.getRefreshToken();
+        }
 
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
             Cookie[] cookies = request.getCookies();
@@ -73,6 +71,11 @@ public class AccountRoute {
     @PostMapping("/register")
     public ResponseEntity<ResponseModel<Object>> register(@Valid @RequestBody RegisterRequestDto registerRequest) {
         return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName());
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<ResponseModel<Object>> getCurrentUser(@CurrentUser CurrentUserDto currentUser) {
+        return accountService.me(currentUser);
     }
 
 }

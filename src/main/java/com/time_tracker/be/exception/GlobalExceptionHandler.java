@@ -5,10 +5,12 @@ import com.time_tracker.be.resolver.ConstraintMessageResolver;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -80,6 +82,24 @@ public class GlobalExceptionHandler {
                 .body(response);
     }
 
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ResponseModel<Map<String, Object>>> handleNoResourceFoundException(NoResourceFoundException ex) {
+        ResponseModel<Map<String, Object>> body = new ResponseModel<>();
+        body.setSuccess(false);
+        body.setMessage("Resource not found");
+        body.setData(null);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ResponseModel<Map<String, Object>>> handleMethodNotSupportedException(HttpRequestMethodNotSupportedException ex) {
+        ResponseModel<Map<String, Object>> body = new ResponseModel<>();
+        body.setSuccess(false);
+        body.setMessage("Method not allowed");
+        body.setData(null);
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ResponseModel<Map<String, String>>> handleGenericException(Exception ex) {
         ResponseModel<Map<String, String>> body = new ResponseModel<>();
@@ -90,6 +110,7 @@ public class GlobalExceptionHandler {
         ex.printStackTrace(); // Log the exception for debugging
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
+
 
     private ResponseModel<Map<String, Object>> handleException(Exception ex) {
         ResponseModel<Map<String, Object>> response = new ResponseModel<>();
