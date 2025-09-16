@@ -5,7 +5,6 @@ import com.time_tracker.be.common.ResponseModel;
 import com.time_tracker.be.common.TokenType;
 import com.time_tracker.be.exception.BadRequestException;
 import com.time_tracker.be.exception.NotFoundException;
-import com.time_tracker.be.refreshToken.RefreshTokenModel;
 import com.time_tracker.be.refreshToken.RefreshTokenService;
 import com.time_tracker.be.refreshToken.dto.AccountCacheDto;
 import com.time_tracker.be.role.RoleModel;
@@ -38,6 +37,7 @@ public class AccountService {
         CLIENT_ID = clientId;
     }
 
+    @Transactional(Transactional.TxType.REQUIRED)
 
     public ResponseEntity<ResponseModel<Object>> login(String email, String password) {
         AccountModel user = this.accountRepository.findByEmail(email);
@@ -61,6 +61,7 @@ public class AccountService {
                 .body(response);
     }
 
+    @Transactional(Transactional.TxType.REQUIRED)
     public ResponseEntity<ResponseModel<Object>> loginWithGoogle(String idTokenString) throws Exception {
         GoogleIdToken.Payload payload = GoogleTokenUtils.verifyGoogleToken(idTokenString);
         String email = (String) payload.get("email");
@@ -93,7 +94,6 @@ public class AccountService {
     public ResponseEntity<ResponseModel<Object>> register(String email, String password, String name) {
         AccountModel user = new AccountModel();
         RoleModel role = new RoleModel();
-        RefreshTokenModel refreshToken = new RefreshTokenModel();
         role.setRoleId(2); // role_id 2 adalah user)
         user.setRoleId(role);
         user.setFullName(name);
@@ -144,12 +144,28 @@ public class AccountService {
         } else {
             HashMap<String, Object> data = this.createTokenResponse(user);
             this.refreshTokenService.addRefreshToken(data.get("refreshToken").toString(), user);
+            this.refreshTokenService.deleteRefreshToken(refreshToken, user);
             ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.get("refreshToken").toString(), 7 * 24 * 60 * 60); // 7 days
             ResponseModel<Object> response = new ResponseModel<>(true, "Refresh token berhasil", data);
             return ResponseEntity.status(HttpStatus.OK)
                     .header("Set-Cookie", cookie.toString())
                     .body(response);
         }
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<Object>> logout(String refreshToken) {
+        if (refreshToken == null || refreshToken.trim().isEmpty()) {
+            throw new BadRequestException("Refresh token tidak ditemukan");
+        }
+        Claims claims = jwtTokenProvider.getClaims(refreshToken);
+        AccountModel user = this.accountRepository.findByEmailAndUserId(claims.get("email").toString(), Integer.parseInt(claims.get("userId").toString()));
+        this.refreshTokenService.deleteRefreshToken(refreshToken, user);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", "", 0); // expire the cookie
+        ResponseModel<Object> response = new ResponseModel<>(true, "Logout berhasil", null);
+        return ResponseEntity.status(HttpStatus.OK)
+                .header("Set-Cookie", cookie.toString())
+                .body(response);
     }
 
     private HashMap<String, Object> createTokenResponse(AccountModel user) {

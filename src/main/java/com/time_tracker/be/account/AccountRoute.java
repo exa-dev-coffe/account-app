@@ -53,6 +53,23 @@ public class AccountRoute {
         return accountService.refreshToken(refreshToken);
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<ResponseModel<Object>> logout(@RequestBody RefreshRequestDto refreshRequestDto, HttpServletRequest request) {
+        String refreshToken = refreshRequestDto.getRefreshToken();
+        if (refreshToken == null || refreshToken.trim().isEmpty()) {
+            Cookie[] cookies = request.getCookies();
+            if (cookies != null) {
+                for (Cookie cookie : cookies) {
+                    if (cookie.getName().equals("refreshToken")) {
+                        refreshToken = cookie.getValue();
+                        break;
+                    }
+                }
+            }
+        }
+        return accountService.logout(refreshToken);
+    }
+
     @PostMapping("/register")
     public ResponseEntity<ResponseModel<Object>> register(@Valid @RequestBody RegisterRequestDto registerRequest) {
         return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName());

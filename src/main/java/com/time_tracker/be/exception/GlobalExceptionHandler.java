@@ -17,57 +17,37 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(NotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleNotFoundException(NotFoundException ex) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", ex.getStatusCode());
-        body.put("message", ex.getMessage());
-        body.put("timestamp", ex.getTimestamp().toString());
-
+    public ResponseEntity<ResponseModel<Map<String, Object>>> handleNotFoundException(NotFoundException ex) {
+        ResponseModel<Map<String, Object>> body = this.handleException(ex);
         return ResponseEntity.status(ex.getStatusCode()).body(body);
     }
 
     @ExceptionHandler(BadRequestException.class)
-    public ResponseEntity<Map<String, Object>> handleBadRequestException(BadRequestException ex) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", ex.getStatusCode());
-        body.put("message", ex.getMessage());
-        body.put("timestamp", ex.getTimestamp());
-
+    public ResponseEntity<ResponseModel<Map<String, Object>>> handleBadRequestException(BadRequestException ex) {
+        ResponseModel<Map<String, Object>> body = this.handleException(ex);
         return ResponseEntity.status(ex.getStatusCode()).body(body);
     }
 
     @ExceptionHandler(ForbiddenException.class)
-    public ResponseEntity<Map<String, Object>> handleForbiddenException(ForbiddenException ex) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", ex.getStatusCode());
-        body.put("message", ex.getMessage());
-        body.put("timestamp", ex.getTimestamp().toString());
-
+    public ResponseEntity<ResponseModel<Map<String, Object>>> handleForbiddenException(ForbiddenException ex) {
+        ResponseModel<Map<String, Object>> body = this.handleException(ex);
         return ResponseEntity.status(ex.getStatusCode()).body(body);
     }
 
     @ExceptionHandler(NotAuthorizedException.class)
-    public ResponseEntity<Map<String, Object>> handleNotAuthorizedException(NotAuthorizedException ex) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", ex.getStatusCode());
-        body.put("message", ex.getMessage());
-        body.put("timestamp", ex.getTimestamp().toString());
-
+    public ResponseEntity<ResponseModel<Map<String, Object>>> handleNotAuthorizedException(NotAuthorizedException ex) {
+        ResponseModel<Map<String, Object>> body = this.handleException(ex);
         return ResponseEntity.status(ex.getStatusCode()).body(body);
     }
 
     @ExceptionHandler(NoHandlerFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleNoHandlerFoundException(NotFoundException ex) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("status", 404);
-        body.put("message", "Resource not found");
-        body.put("timestamp", ex.getTimestamp().toString());
-
+    public ResponseEntity<ResponseModel<Map<String, Object>>> handleNoHandlerFoundException(NotFoundException ex) {
+        ResponseModel<Map<String, Object>> body = this.handleException(ex);
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<?> handleValidationException(MethodArgumentNotValidException ex) {
+    public ResponseEntity<ResponseModel<Map<String, String>>> handleValidationException(MethodArgumentNotValidException ex) {
         Map<String, String> errors = new HashMap<>();
 
         ex.getBindingResult().getFieldErrors().forEach(error ->
@@ -85,7 +65,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Object> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+    public ResponseEntity<ResponseModel<Map<String, String>>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
         String dbMessage = e.getMostSpecificCause().getMessage();
         String userMessage = ConstraintMessageResolver.resolveMessage(dbMessage);
 
@@ -101,7 +81,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Object> handleGenericException(Exception ex) {
+    public ResponseEntity<ResponseModel<Map<String, String>>> handleGenericException(Exception ex) {
         ResponseModel<Map<String, String>> body = new ResponseModel<>();
         body.setSuccess(false);
         body.setMessage("An unexpected error occurred");
@@ -109,5 +89,13 @@ public class GlobalExceptionHandler {
         body.setTimestamp(java.time.LocalDateTime.now());
         ex.printStackTrace(); // Log the exception for debugging
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+    }
+
+    private ResponseModel<Map<String, Object>> handleException(Exception ex) {
+        ResponseModel<Map<String, Object>> response = new ResponseModel<>();
+        response.setSuccess(false);
+        response.setMessage(ex.getMessage());
+        response.setData(null);
+        return response;
     }
 }

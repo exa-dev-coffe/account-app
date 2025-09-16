@@ -31,6 +31,14 @@ public class RefreshTokenService {
         this.redisTemplate.opsForValue().set("refreshToken:" + refreshToken, accountCacheDto);
     }
 
+    public void deleteRefreshToken(String refreshToken, AccountModel accountModel) {
+        this.redisTemplate.delete("refreshToken:" + refreshToken);
+        int deletedCount = this.refreshTokenRepository.deleteByTokenAndUserId(refreshToken, accountModel);
+        if (deletedCount == 0) {
+            log.warn("No refresh token found to delete for token: {} and userId: {}", refreshToken, accountModel.getUserId());
+        }
+    }
+
     public AccountCacheDto findByTokenAndUserId(String token, AccountModel user) {
         AccountCacheDto tokenOnRedis = (AccountCacheDto) this.redisTemplate.opsForValue().get("refreshToken:" + token);
         if (tokenOnRedis != null) {
