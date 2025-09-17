@@ -1,5 +1,8 @@
 package com.time_tracker.be.common;
 
+import lombok.Getter;
+
+@Getter
 public enum TokenType {
     ACCESS("access"),
     REFRESH("refresh");
@@ -8,10 +11,6 @@ public enum TokenType {
 
     TokenType(String value) {
         this.value = value;
-    }
-
-    public String getValue() {
-        return value;
     }
 
     public static TokenType fromValue(String value) {

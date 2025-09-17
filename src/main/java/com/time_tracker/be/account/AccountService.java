@@ -94,10 +94,10 @@ public class AccountService {
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
-    public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name, Integer type) {
         AccountModel user = new AccountModel();
         RoleModel role = new RoleModel();
-        role.setRoleId(2); // role_id 2 adalah user)
+        role.setRoleId(type);
         user.setRole(role);
         user.setFullName(name);
         user.setEmail(email);

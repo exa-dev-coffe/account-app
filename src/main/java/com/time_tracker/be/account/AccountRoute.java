@@ -70,11 +70,16 @@ public class AccountRoute {
 
     @PostMapping("/register")
     public ResponseEntity<ResponseModel<TokenResponseDto>> register(@Valid @RequestBody RegisterRequestDto registerRequest) {
-        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName());
+        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), 2);
+    }
+
+    @PostMapping("/register-barista")
+    public ResponseEntity<ResponseModel<TokenResponseDto>> registerBarista(@Valid @RequestBody RegisterRequestDto registerRequest) {
+        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), 3);
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ResponseModel<MeResponseDto>> getCurrentUser(@CurrentUser CurrentUserDto currentUser) {
+    public ResponseEntity<ResponseModel<MeResponseDto>> me(@CurrentUser CurrentUserDto currentUser) {
         return accountService.me(currentUser);
     }
 
