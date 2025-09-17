@@ -3,6 +3,7 @@ package com.time_tracker.be.account;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.time_tracker.be.account.dto.CurrentUserDto;
 import com.time_tracker.be.account.dto.MeResponseDto;
+import com.time_tracker.be.account.dto.TokenResponseDto;
 import com.time_tracker.be.account.projection.AccountProjection;
 import com.time_tracker.be.common.ResponseModel;
 import com.time_tracker.be.common.TokenType;
@@ -24,7 +25,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
-import java.util.HashMap;
 
 @Slf4j
 @Service
@@ -42,7 +42,7 @@ public class AccountService {
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
-    public ResponseEntity<ResponseModel<Object>> login(String email, String password) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> login(String email, String password) {
         AccountModel user = this.accountRepository.findByEmail(email);
 
         if (user == null) {
@@ -55,17 +55,17 @@ public class AccountService {
             throw new BadRequestException("Password salah atau email tidak terdaftar");
         }
 
-        HashMap<String, Object> data = this.createTokenResponse(user);
-        this.refreshTokenService.addRefreshToken(data.get("refreshToken").toString(), user);
-        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.get("refreshToken").toString(), 7 * 24 * 60 * 60); // 7 days
-        ResponseModel<Object> response = new ResponseModel<>(true, "Login berhasil", data);
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login berhasil", data);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
-    public ResponseEntity<ResponseModel<Object>> loginWithGoogle(String idTokenString) throws Exception {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> loginWithGoogle(String idTokenString) throws Exception {
         GoogleIdToken.Payload payload = GoogleTokenUtils.verifyGoogleToken(idTokenString);
         String email = (String) payload.get("email");
         boolean emailVerified = Boolean.parseBoolean((String) payload.get("email_verified"));
@@ -84,17 +84,17 @@ public class AccountService {
             throw new NotFoundException("Email tidak ditemukan");
         }
 
-        HashMap<String, Object> data = this.createTokenResponse(user);
-        this.refreshTokenService.addRefreshToken(data.get("refreshToken").toString(), user);
-        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.get("refreshToken").toString(), 7 * 24 * 60 * 60); // 7 days
-        ResponseModel<Object> response = new ResponseModel<>(true, "Login berhasil", data);
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login berhasil", data);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
-    public ResponseEntity<ResponseModel<Object>> register(String email, String password, String name) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name) {
         AccountModel user = new AccountModel();
         RoleModel role = new RoleModel();
         role.setRoleId(2); // role_id 2 adalah user)
@@ -105,17 +105,17 @@ public class AccountService {
         user.setPhoto(null);
         user.setBalanceId(null); // balance di-set null, karena akan di-set setelah registrasi di BalanceService
         this.accountRepository.save(user);
-        HashMap<String, Object> data = this.createTokenResponse(user);
-        this.refreshTokenService.addRefreshToken(data.get("refreshToken").toString(), user);
-        ResponseModel<Object> response = new ResponseModel<>(true, "Registrasi berhasil", data);
-        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.get("refreshToken").toString(), 7 * 24 * 60 * 60); // 7 days
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Registrasi berhasil", data);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
-    public ResponseEntity<ResponseModel<Object>> refreshToken(String refreshToken) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> refreshToken(String refreshToken) {
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
             throw new BadRequestException("Refresh token tidak ditemukan");
         }
@@ -141,18 +141,19 @@ public class AccountService {
 
         if (!isExpired) {
             String newAccessToken = jwtTokenProvider.createToken(user, TokenType.ACCESS);
-            HashMap<String, Object> data = new HashMap<>();
-            data.put("accessToken", newAccessToken);
-            data.put("refreshToken", refreshToken);
-            ResponseModel<Object> response = new ResponseModel<>(true, "Refresh token berhasil", data);
+            TokenResponseDto data = new TokenResponseDto();
+            data.setAccessToken(newAccessToken);
+            data.setRefreshToken(refreshToken);
+            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token berhasil", data);
             return ResponseEntity.status(HttpStatus.OK)
                     .body(response);
         } else {
-            HashMap<String, Object> data = this.createTokenResponse(user);
-            this.refreshTokenService.addRefreshToken(data.get("refreshToken").toString(), user);
+            TokenResponseDto data = this.createTokenResponse(user);
+            this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
             this.refreshTokenService.deleteRefreshToken(refreshToken, user);
-            ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.get("refreshToken").toString(), 7 * 24 * 60 * 60); // 7 days
-            ResponseModel<Object> response = new ResponseModel<>(true, "Refresh token berhasil", data);
+            ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+
+            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token berhasil", data);
             return ResponseEntity.status(HttpStatus.OK)
                     .header("Set-Cookie", cookie.toString())
                     .body(response);
@@ -174,7 +175,7 @@ public class AccountService {
                 .body(response);
     }
 
-    public ResponseEntity<ResponseModel<Object>> me(CurrentUserDto user) {
+    public ResponseEntity<ResponseModel<MeResponseDto>> me(CurrentUserDto user) {
         if (user == null) {
             throw new NotFoundException("User tidak ditemukan");
         }
@@ -188,17 +189,17 @@ public class AccountService {
         me.setFullName(data.getFullName());
         me.setPhoto(data.getPhoto());
         me.setRole(data.getRole().getRoleName());
-        ResponseModel<Object> response = new ResponseModel<>(true, "Data user ditemukan", me);
+        ResponseModel<MeResponseDto> response = new ResponseModel<>(true, "Data user ditemukan", me);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
 
-    private HashMap<String, Object> createTokenResponse(AccountModel user) {
+    private TokenResponseDto createTokenResponse(AccountModel user) {
         String accessToken = jwtTokenProvider.createToken(user, TokenType.ACCESS);
         String refreshToken = jwtTokenProvider.createToken(user, TokenType.REFRESH);
-        HashMap<String, Object> data = new HashMap<>();
-        data.put("accessToken", accessToken);
-        data.put("refreshToken", refreshToken);
+        TokenResponseDto data = new TokenResponseDto();
+        data.setAccessToken(accessToken);
+        data.setRefreshToken(refreshToken);
         return data;
     }
 

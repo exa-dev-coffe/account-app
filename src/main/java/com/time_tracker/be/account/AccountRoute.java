@@ -21,17 +21,17 @@ public class AccountRoute {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ResponseModel<Object>> login(@Valid @RequestBody LoginRequestDto loginRequest) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> login(@Valid @RequestBody LoginRequestDto loginRequest) {
         return accountService.login(loginRequest.getEmail(), loginRequest.getPassword());
     }
 
     @PostMapping("/login-by-google")
-    public ResponseEntity<ResponseModel<Object>> loginWithGoogle(@RequestBody LoginGoogleRequestDto loginRequest) throws Exception {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> loginWithGoogle(@RequestBody LoginGoogleRequestDto loginRequest) throws Exception {
         return accountService.loginWithGoogle(loginRequest.getToken());
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<ResponseModel<Object>> refreshToken(@RequestBody(required = false) RefreshRequestDto refreshRequestDto, HttpServletRequest request) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> refreshToken(@RequestBody(required = false) RefreshRequestDto refreshRequestDto, HttpServletRequest request) {
         String refreshToken = null;
         if (refreshRequestDto != null) {
             refreshToken = refreshRequestDto.getRefreshToken();
@@ -69,12 +69,12 @@ public class AccountRoute {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<ResponseModel<Object>> register(@Valid @RequestBody RegisterRequestDto registerRequest) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> register(@Valid @RequestBody RegisterRequestDto registerRequest) {
         return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName());
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ResponseModel<Object>> getCurrentUser(@CurrentUser CurrentUserDto currentUser) {
+    public ResponseEntity<ResponseModel<MeResponseDto>> getCurrentUser(@CurrentUser CurrentUserDto currentUser) {
         return accountService.me(currentUser);
     }
 
