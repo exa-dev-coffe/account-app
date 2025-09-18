@@ -38,7 +38,7 @@ public class AccountService {
         this.accountRepository = accountRepository;
         this.refreshTokenService = refreshTokenService;
         this.jwtTokenProvider = jwtTokenProvider;
-        CLIENT_ID = clientId;
+        this.CLIENT_ID = clientId;
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
