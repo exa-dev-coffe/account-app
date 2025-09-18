@@ -25,6 +25,9 @@ public class UploadService {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("File tidak ditemukan");
         }
+        if (!validateFile(file)) {
+            throw new BadRequestException("File tidak valid. Pastikan file adalah gambar (JPEG, PNG) dan ukuran maksimal 5MB.");
+        }
         try {
             String objectName = "coffe/images/profiles/" + System.currentTimeMillis() + file.getOriginalFilename();
             String url = minioUtils.uploadFile(file, objectName);
@@ -38,4 +41,19 @@ public class UploadService {
             throw new BadRequestException("Gagal mengupload file");
         }
     }
+
+    private boolean validateFile(MultipartFile file) {
+        return validateFileType(file) && validateFileSize(file);
+    }
+
+    private boolean validateFileType(MultipartFile file) {
+        String contentType = file.getContentType();
+        return contentType != null && (contentType.equals("image/jpeg") || contentType.equals("image/png"));
+    }
+
+    private boolean validateFileSize(MultipartFile file) {
+        long maxSize = 5 * 1024 * 1024; // 5MB
+        return file.getSize() <= maxSize;
+    }
+
 }
