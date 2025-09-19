@@ -1,10 +1,13 @@
 package com.time_tracker.be.account;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.time_tracker.be.account.dto.BaristaResponseDto;
 import com.time_tracker.be.account.dto.CurrentUserDto;
 import com.time_tracker.be.account.dto.MeResponseDto;
 import com.time_tracker.be.account.dto.TokenResponseDto;
 import com.time_tracker.be.account.projection.AccountProjection;
+import com.time_tracker.be.account.projection.BaristaProjection;
+import com.time_tracker.be.common.PaginationResponseDto;
 import com.time_tracker.be.common.ResponseModel;
 import com.time_tracker.be.common.TokenType;
 import com.time_tracker.be.exception.BadRequestException;
@@ -19,6 +22,8 @@ import io.jsonwebtoken.Claims;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -194,6 +199,33 @@ public class AccountService {
                 .body(response);
     }
 
+    public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, String search) {
+        RoleModel barista = new RoleModel();
+        barista.setRoleId(3);
+        Page<BaristaProjection> data = this.accountRepository.findByRoleAndEmailLikeIgnoreCase(barista, "%" + search + "%", pageable);
+        Page<BaristaResponseDto> responseData = data.map(baristaData -> {
+            BaristaResponseDto dto = new BaristaResponseDto();
+            dto.setUserId(baristaData.getUserId());
+            dto.setFullName(baristaData.getFullName());
+            dto.setEmail(baristaData.getEmail());
+            dto.setPhoto(baristaData.getPhoto());
+            return dto;
+        });
+        PaginationResponseDto<BaristaResponseDto> responsePagination = new PaginationResponseDto<>();
+        responsePagination.setData(responseData.getContent());
+        responsePagination.setTotalData(responseData.getTotalElements());
+        responsePagination.setTotalPages(responseData.getTotalPages());
+        responsePagination.setCurrentPage(responseData.getNumber() + 1);
+        responsePagination.setPageSize(responseData.getSize());
+        responsePagination.setLastPage(responseData.isLast());
+
+        ResponseModel<PaginationResponseDto<BaristaResponseDto>> response = new ResponseModel<>(true, "Data barista ditemukan", responsePagination);
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(response);
+
+
+    }
+
     private TokenResponseDto createTokenResponse(AccountModel user) {
         String accessToken = jwtTokenProvider.createToken(user, TokenType.ACCESS);
         String refreshToken = jwtTokenProvider.createToken(user, TokenType.REFRESH);
@@ -209,7 +241,7 @@ public class AccountService {
                 .secure(true)
                 .path("/")
                 .maxAge(maxAge)
-                .sameSite("None")
+                .sameSite("Strict")
                 .build();
     }
 

@@ -51,28 +51,6 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    // Memvalidasi token JWT
-    public boolean validateToken(String token) {
-        try {
-            Claims claims = Jwts.parserBuilder()
-                    .setSigningKey(getSigningKey())
-                    .build()
-                    .parseClaimsJws(token)
-                    .getBody();
-            return !claims.getExpiration().before(new Date());
-        } catch (ExpiredJwtException e) {
-            return false;
-        } catch (MalformedJwtException e) {
-            throw new NotAuthorizedException("Invalid token");
-        } catch (UnsupportedJwtException e) {
-            throw new NotAuthorizedException("Unsupported token");
-        } catch (IllegalArgumentException e) {
-            throw new NotAuthorizedException("Token is empty or null");
-        } catch (Exception e) {
-            throw new NotAuthorizedException("Token error");
-        }
-    }
-
     // Ambil claims dari token
     public Claims getClaims(String token) {
         try {
