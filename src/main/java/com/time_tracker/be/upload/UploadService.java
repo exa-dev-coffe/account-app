@@ -2,8 +2,8 @@ package com.time_tracker.be.upload;
 
 import com.time_tracker.be.common.ResponseModel;
 import com.time_tracker.be.exception.BadRequestException;
+import com.time_tracker.be.lib.MinioService;
 import com.time_tracker.be.upload.dto.UploadResponseDto;
-import com.time_tracker.be.utils.MinioUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,12 +13,12 @@ import org.springframework.web.multipart.MultipartFile;
 @Slf4j
 @Service
 public class UploadService {
-    private final MinioUtils minioUtils;
+    private final MinioService minioService;
 
-    public UploadService(MinioUtils minioUtils) {
+    public UploadService(MinioService minioService) {
 
 
-        this.minioUtils = minioUtils;
+        this.minioService = minioService;
     }
 
     public ResponseEntity<ResponseModel<UploadResponseDto>> uploadProfile(MultipartFile file) {
@@ -30,7 +30,7 @@ public class UploadService {
         }
         try {
             String objectName = "coffe/images/profiles/" + System.currentTimeMillis() + file.getOriginalFilename();
-            String url = minioUtils.uploadFile(file, objectName);
+            String url = minioService.uploadFile(file, objectName);
             UploadResponseDto data = new UploadResponseDto();
             data.setUrl(url);
             ResponseModel<UploadResponseDto> response = new ResponseModel<>(true, "Upload berhasil", data);
@@ -40,6 +40,20 @@ public class UploadService {
             log.error("Error upload file: {}", e.getMessage());
             throw new BadRequestException("Gagal mengupload file");
         }
+    }
+
+    public ResponseEntity<ResponseModel<String>> deleteFile(String url) {
+        if (url == null || url.isEmpty()) {
+            throw new BadRequestException("URL tidak ditemukan");
+        }
+        if (!url.startsWith("https://storage.eka-dev.cloud/project")) {
+            throw new BadRequestException("URL tidak valid");
+        }
+        String objectName = url.split("project")[1].substring(1);
+        minioService.deleteFile(objectName);
+        ResponseModel<String> response = new ResponseModel<>(true, "Delete berhasil", objectName);
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(response);
     }
 
     private boolean validateFile(MultipartFile file) {
