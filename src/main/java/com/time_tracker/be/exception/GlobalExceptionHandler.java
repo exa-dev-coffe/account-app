@@ -104,13 +104,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ResponseModel<Map<String, String>>> handleGenericException(Exception ex) {
         ResponseModel<Map<String, String>> body = new ResponseModel<>();
         body.setSuccess(false);
-        body.setMessage("An unexpected error occurred");
+        body.setMessage("Internal server error");
         body.setData(null);
         body.setTimestamp(java.time.LocalDateTime.now());
         ex.printStackTrace(); // Log the exception for debugging
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 
+    @ExceptionHandler(TooManyRequestException.class)
+    public ResponseEntity<ResponseModel<Map<String, Object>>> handleTooManyRequestException(TooManyRequestException ex) {
+        ResponseModel<Map<String, Object>> body = this.handleException(ex);
+        return ResponseEntity.status(ex.getStatusCode()).body(body);
+    }
 
     private ResponseModel<Map<String, Object>> handleException(Exception ex) {
         ResponseModel<Map<String, Object>> response = new ResponseModel<>();
