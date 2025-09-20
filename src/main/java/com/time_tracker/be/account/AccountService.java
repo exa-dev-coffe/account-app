@@ -1,5 +1,6 @@
 package com.time_tracker.be.account;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.time_tracker.be.account.dto.BaristaResponseDto;
 import com.time_tracker.be.account.dto.CurrentUserDto;
@@ -12,10 +13,13 @@ import com.time_tracker.be.common.ResponseModel;
 import com.time_tracker.be.common.TokenType;
 import com.time_tracker.be.exception.BadRequestException;
 import com.time_tracker.be.exception.NotFoundException;
+import com.time_tracker.be.exception.TooManyRequestException;
+import com.time_tracker.be.lib.RabbitmqService;
 import com.time_tracker.be.refreshToken.RefreshTokenService;
 import com.time_tracker.be.refreshToken.dto.AccountCacheDto;
 import com.time_tracker.be.role.RoleModel;
 import com.time_tracker.be.security.JwtTokenProvider;
+import com.time_tracker.be.tokenResetPassword.ResetTokenPasswordService;
 import com.time_tracker.be.utils.GoogleTokenUtils;
 import com.time_tracker.be.utils.PasswordUtils;
 import io.jsonwebtoken.Claims;
@@ -30,6 +34,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
+import java.util.HashMap;
 
 @Slf4j
 @Service
@@ -38,12 +43,18 @@ public class AccountService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final String CLIENT_ID;
+    private final RabbitmqService rabbitmqService;
+    private final String frontendUrl;
+    private final ResetTokenPasswordService resetTokenPasswordService;
 
-    public AccountService(AccountRepository accountRepository, JwtTokenProvider jwtTokenProvider, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService) {
+    public AccountService(AccountRepository accountRepository, JwtTokenProvider jwtTokenProvider, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService) {
         this.accountRepository = accountRepository;
+        this.resetTokenPasswordService = resetTokenPasswordService;
+        this.rabbitmqService = rabbitmqService;
         this.refreshTokenService = refreshTokenService;
         this.jwtTokenProvider = jwtTokenProvider;
         this.CLIENT_ID = clientId;
+        this.frontendUrl = frontendUrl;
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
@@ -199,6 +210,91 @@ public class AccountService {
                 .body(response);
     }
 
+    public ResponseEntity<ResponseModel<String>> forgotPassword(String email) throws Exception {
+        AccountModel user = this.accountRepository.findByEmail(email);
+
+        if (user == null) {
+            throw new NotFoundException("User tidak ditemukan");
+        }
+
+        if (this.resetTokenPasswordService.checkWasLimitOneDay(user)) {
+            throw new TooManyRequestException("Anda telah mencapai batas maksimal permintaan reset password hari ini. Silakan coba lagi besok.");
+        }
+
+        String resetToken = jwtTokenProvider.createToken(user, TokenType.RESET_PASSWORD);
+        this.resetTokenPasswordService.addResetToken(resetToken, user);
+        HashMap<String, Object> emailPayload = new HashMap<>();
+        emailPayload.put("to", user.getEmail());
+        emailPayload.put("subject", "Reset Password");
+        emailPayload.put("link", frontendUrl + "/reset-password?token=" + resetToken);
+        ObjectMapper mapper = new ObjectMapper();
+        String jsonMessage = mapper.writeValueAsString(emailPayload);
+
+        this.rabbitmqService.sendMessage(
+                "emailQueue.resetPassword",
+                "",
+                null,
+                jsonMessage,
+                true,
+                false,
+                false,
+                null
+        );
+
+
+        ResponseModel<String> response = new ResponseModel<>(true, "Link reset password telah dikirim ke email Anda jika email terdaftar.", null);
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> resetPassword(String token, String newPassword) throws Exception {
+        Claims claims = jwtTokenProvider.getClaims(token);
+
+        boolean isExpired = claims.getExpiration().before(new Date());
+
+        if (isExpired) {
+            throw new BadRequestException("Token expired");
+        }
+
+        if (!claims.get("type").equals(TokenType.RESET_PASSWORD.name())) {
+            throw new BadRequestException("Token tidak valid");
+        }
+
+        AccountModel user = this.accountRepository.findByUserId(Integer.parseInt(claims.get("userId").toString()));
+
+        if (user == null) {
+            throw new NotFoundException("User tidak ditemukan");
+        }
+
+        user.setPassword(PasswordUtils.hashPassword(newPassword));
+        this.accountRepository.save(user);
+
+        this.resetTokenPasswordService.updateResetToken(token, user);
+
+        HashMap<String, Object> emailPayload = new HashMap<>();
+        emailPayload.put("to", user.getEmail());
+        emailPayload.put("subject", "Reset Password Berhasil");
+        ObjectMapper mapper = new ObjectMapper();
+        String jsonMessage = mapper.writeValueAsString(emailPayload);
+
+        this.rabbitmqService.sendMessage(
+                "emailQueue.resetPasswordSuccess",
+                "",
+                null,
+                jsonMessage,
+                true,
+                false,
+                false,
+                null
+        );
+
+
+        ResponseModel<String> response = new ResponseModel<>(true, "Password berhasil diubah", null);
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(response);
+    }
+
     public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, String search) {
         RoleModel barista = new RoleModel();
         barista.setRoleId(3);
@@ -246,6 +342,6 @@ public class AccountService {
     }
 
     private AccountCacheDto getTokenFromDb(String token, AccountModel user) {
-        return refreshTokenService.findByTokenAndUserId(token, user);
+        return refreshTokenService.findByToken(token, user);
     }
 }

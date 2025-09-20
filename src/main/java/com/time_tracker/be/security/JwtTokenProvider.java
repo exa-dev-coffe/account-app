@@ -37,16 +37,23 @@ public class JwtTokenProvider {
         return claims;
     }
 
+    private Date getExpirationDate(TokenType type) {
+        long now = System.currentTimeMillis();
+        return switch (type) {
+            case ACCESS -> new Date(now + 1000L * 60 * 15); // 15 menit
+            case REFRESH -> new Date(now + 1000L * 60 * 60 * 24 * 7); // 7 hari
+            case RESET_PASSWORD -> new Date(now + 1000L * 60 * 5); // 5 menit
+            default -> throw new IllegalArgumentException("Unknown token type: " + type);
+        };
+    }
+
     // Membuat token JWT
     public String createToken(AccountModel user, TokenType type) {
         return Jwts.builder()
                 .setClaims(createClaims(user, type))
                 .setSubject(user.getEmail())
                 .setIssuedAt(new Date())
-                .setExpiration(type.equals(TokenType.ACCESS)
-                        ? new Date(System.currentTimeMillis() + 1000L * 60 * 15) // 15 menit
-                        : new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24 * 7) // 7 hari
-                )
+                .setExpiration(getExpirationDate(type))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS512)
                 .compact();
     }

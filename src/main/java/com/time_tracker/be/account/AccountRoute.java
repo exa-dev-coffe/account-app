@@ -88,9 +88,19 @@ public class AccountRoute {
         return accountService.me(currentUser);
     }
 
-    @GetMapping(path = "/barista/list-barista")
+    @GetMapping("/barista/list-barista")
     public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(@Valid Pageable pageable, @Param("search") String search) {
         return accountService.listBarista(pageable, search);
+    }
+
+    @PostMapping("/auth/forgot-password")
+    public ResponseEntity<ResponseModel<String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequestDto forgotPasswordRequest) throws Exception {
+        return accountService.forgotPassword(forgotPasswordRequest.getEmail());
+    }
+
+    @PostMapping("/auth/change-password")
+    public ResponseEntity<ResponseModel<String>> resetPassword(@Valid @RequestBody ResetPasswordRequestDto resetPasswordRequest) throws Exception {
+        return accountService.resetPassword(resetPasswordRequest.getToken(), resetPasswordRequest.getPassword());
     }
 
 
