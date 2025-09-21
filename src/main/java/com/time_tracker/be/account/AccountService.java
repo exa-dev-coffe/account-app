@@ -10,11 +10,11 @@ import com.time_tracker.be.account.projection.AccountProjection;
 import com.time_tracker.be.exception.BadRequestException;
 import com.time_tracker.be.exception.NotFoundException;
 import com.time_tracker.be.exception.TooManyRequestException;
+import com.time_tracker.be.lib.JwtService;
 import com.time_tracker.be.lib.RabbitmqService;
 import com.time_tracker.be.refreshToken.RefreshTokenService;
 import com.time_tracker.be.refreshToken.dto.AccountCacheDto;
 import com.time_tracker.be.role.RoleModel;
-import com.time_tracker.be.security.JwtTokenProvider;
 import com.time_tracker.be.tokenResetPassword.ResetTokenPasswordService;
 import com.time_tracker.be.utils.GoogleTokenUtils;
 import com.time_tracker.be.utils.PasswordUtils;
@@ -42,19 +42,19 @@ import java.util.HashMap;
 @Service
 public class AccountService {
     private final AccountRepository accountRepository;
-    private final JwtTokenProvider jwtTokenProvider;
+    private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final String CLIENT_ID;
     private final RabbitmqService rabbitmqService;
     private final String frontendUrl;
     private final ResetTokenPasswordService resetTokenPasswordService;
 
-    public AccountService(AccountRepository accountRepository, JwtTokenProvider jwtTokenProvider, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService) {
+    public AccountService(AccountRepository accountRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService) {
         this.accountRepository = accountRepository;
         this.resetTokenPasswordService = resetTokenPasswordService;
         this.rabbitmqService = rabbitmqService;
         this.refreshTokenService = refreshTokenService;
-        this.jwtTokenProvider = jwtTokenProvider;
+        this.jwtService = jwtService;
         this.CLIENT_ID = clientId;
         this.frontendUrl = frontendUrl;
     }
@@ -137,7 +137,7 @@ public class AccountService {
             throw new BadRequestException("Refresh token tidak ditemukan");
         }
 
-        Claims claims = jwtTokenProvider.getClaims(refreshToken);
+        Claims claims = jwtService.getClaims(refreshToken);
 
         boolean isExpired = claims.getExpiration().before(new Date());
 
@@ -157,7 +157,7 @@ public class AccountService {
         }
 
         if (!isExpired) {
-            String newAccessToken = jwtTokenProvider.createToken(user, TokenType.ACCESS);
+            String newAccessToken = jwtService.createToken(user, TokenType.ACCESS);
             TokenResponseDto data = new TokenResponseDto();
             data.setAccessToken(newAccessToken);
             data.setRefreshToken(refreshToken);
@@ -182,7 +182,7 @@ public class AccountService {
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
             throw new BadRequestException("Refresh token tidak ditemukan");
         }
-        Claims claims = jwtTokenProvider.getClaims(refreshToken);
+        Claims claims = jwtService.getClaims(refreshToken);
         AccountModel user = this.accountRepository.findByUserId(Integer.parseInt(claims.get("userId").toString()));
         this.refreshTokenService.deleteRefreshToken(refreshToken, user);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", "", 0); // expire the cookie
@@ -222,7 +222,7 @@ public class AccountService {
             throw new TooManyRequestException("Anda telah mencapai batas maksimal permintaan reset password hari ini. Silakan coba lagi besok.");
         }
 
-        String resetToken = jwtTokenProvider.createToken(user, TokenType.RESET_PASSWORD);
+        String resetToken = jwtService.createToken(user, TokenType.RESET_PASSWORD);
         this.resetTokenPasswordService.addResetToken(resetToken, user);
         HashMap<String, Object> emailPayload = new HashMap<>();
         emailPayload.put("to", user.getEmail());
@@ -250,7 +250,7 @@ public class AccountService {
 
     @Transactional(Transactional.TxType.REQUIRED)
     public ResponseEntity<ResponseModel<String>> resetPassword(String token, String newPassword) throws Exception {
-        Claims claims = jwtTokenProvider.getClaims(token);
+        Claims claims = jwtService.getClaims(token);
 
         boolean isExpired = claims.getExpiration().before(new Date());
 
@@ -337,8 +337,8 @@ public class AccountService {
     }
 
     private TokenResponseDto createTokenResponse(AccountModel user) {
-        String accessToken = jwtTokenProvider.createToken(user, TokenType.ACCESS);
-        String refreshToken = jwtTokenProvider.createToken(user, TokenType.REFRESH);
+        String accessToken = jwtService.createToken(user, TokenType.ACCESS);
+        String refreshToken = jwtService.createToken(user, TokenType.REFRESH);
         TokenResponseDto data = new TokenResponseDto();
         data.setAccessToken(accessToken);
         data.setRefreshToken(refreshToken);

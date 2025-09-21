@@ -1,4 +1,4 @@
-package com.time_tracker.be.security;
+package com.time_tracker.be.lib;
 
 import com.time_tracker.be.account.AccountModel;
 import com.time_tracker.be.exception.NotAuthorizedException;
@@ -15,7 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Component
-public class JwtTokenProvider {
+public class JwtService {
 
     @Value("${app.jwt.secret}")
     private String SECRET_KEY;

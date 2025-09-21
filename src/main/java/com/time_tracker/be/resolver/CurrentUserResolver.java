@@ -2,7 +2,7 @@ package com.time_tracker.be.resolver;
 
 import com.time_tracker.be.account.dto.CurrentUserDto;
 import com.time_tracker.be.annotation.CurrentUser;
-import com.time_tracker.be.security.JwtTokenProvider;
+import com.time_tracker.be.lib.JwtService;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -16,10 +16,10 @@ import org.springframework.web.method.support.ModelAndViewContainer;
 @Slf4j
 @Component
 public class CurrentUserResolver implements HandlerMethodArgumentResolver {
-    private final JwtTokenProvider jwtTokenProvider;
+    private final JwtService jwtService;
 
-    public CurrentUserResolver(JwtTokenProvider jwtTokenProvider) {
-        this.jwtTokenProvider = jwtTokenProvider;
+    public CurrentUserResolver(JwtService jwtService) {
+        this.jwtService = jwtService;
     }
 
     @Override
@@ -39,7 +39,7 @@ public class CurrentUserResolver implements HandlerMethodArgumentResolver {
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
             token = token.substring(7);
-            Claims claims = jwtTokenProvider.getClaims(token); // decode token pakai jwt util kamu
+            Claims claims = jwtService.getClaims(token); // decode token pakai jwt util kamu
             CurrentUserDto account = new CurrentUserDto();
             account.setUserId(claims.get("userId", Integer.class));
             account.setEmail(claims.get("email", String.class));
