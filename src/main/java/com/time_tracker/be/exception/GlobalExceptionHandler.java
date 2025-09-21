@@ -1,7 +1,7 @@
 package com.time_tracker.be.exception;
 
-import com.time_tracker.be.common.ResponseModel;
 import com.time_tracker.be.resolver.ConstraintMessageResolver;
+import com.time_tracker.be.utils.commons.ResponseModel;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

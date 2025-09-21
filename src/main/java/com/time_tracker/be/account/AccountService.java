@@ -8,9 +8,6 @@ import com.time_tracker.be.account.dto.MeResponseDto;
 import com.time_tracker.be.account.dto.TokenResponseDto;
 import com.time_tracker.be.account.projection.AccountProjection;
 import com.time_tracker.be.account.projection.BaristaProjection;
-import com.time_tracker.be.common.PaginationResponseDto;
-import com.time_tracker.be.common.ResponseModel;
-import com.time_tracker.be.common.TokenType;
 import com.time_tracker.be.exception.BadRequestException;
 import com.time_tracker.be.exception.NotFoundException;
 import com.time_tracker.be.exception.TooManyRequestException;
@@ -22,6 +19,9 @@ import com.time_tracker.be.security.JwtTokenProvider;
 import com.time_tracker.be.tokenResetPassword.ResetTokenPasswordService;
 import com.time_tracker.be.utils.GoogleTokenUtils;
 import com.time_tracker.be.utils.PasswordUtils;
+import com.time_tracker.be.utils.commons.PaginationResponseDto;
+import com.time_tracker.be.utils.commons.ResponseModel;
+import com.time_tracker.be.utils.enums.TokenType;
 import io.jsonwebtoken.Claims;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
@@ -119,7 +119,6 @@ public class AccountService {
         user.setEmail(email);
         user.setPassword(PasswordUtils.hashPassword(password));
         user.setPhoto(null);
-        user.setBalanceId(null); // balance di-set null, karena akan di-set setelah registrasi di BalanceService
         this.accountRepository.save(user);
         TokenResponseDto data = this.createTokenResponse(user);
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);

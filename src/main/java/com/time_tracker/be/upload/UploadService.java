@@ -1,9 +1,9 @@
 package com.time_tracker.be.upload;
 
-import com.time_tracker.be.common.ResponseModel;
 import com.time_tracker.be.exception.BadRequestException;
 import com.time_tracker.be.lib.MinioService;
 import com.time_tracker.be.upload.dto.UploadResponseDto;
+import com.time_tracker.be.utils.commons.ResponseModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

@@ -1,6 +1,6 @@
 package com.time_tracker.be.balance;
 
-import com.time_tracker.be.common.BaseModal;
+import com.time_tracker.be.utils.commons.BaseModal;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

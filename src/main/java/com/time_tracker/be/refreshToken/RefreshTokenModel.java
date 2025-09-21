@@ -2,7 +2,7 @@ package com.time_tracker.be.refreshToken;
 
 
 import com.time_tracker.be.account.AccountModel;
-import com.time_tracker.be.common.BaseModal;
+import com.time_tracker.be.utils.commons.BaseModal;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;

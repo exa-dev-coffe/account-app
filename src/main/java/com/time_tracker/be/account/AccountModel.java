@@ -1,8 +1,7 @@
 package com.time_tracker.be.account;
 
-import com.time_tracker.be.balance.BalanceModel;
-import com.time_tracker.be.common.BaseModal;
 import com.time_tracker.be.role.RoleModel;
+import com.time_tracker.be.utils.commons.BaseModal;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -32,8 +31,4 @@ public class AccountModel extends BaseModal {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "role_id", nullable = false)
     private RoleModel role;
-
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "balance_id", nullable = true)
-    private BalanceModel balanceId;
 }

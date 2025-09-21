@@ -1,8 +1,8 @@
 package com.time_tracker.be.upload;
 
 import com.time_tracker.be.annotation.RequireAuth;
-import com.time_tracker.be.common.ResponseModel;
 import com.time_tracker.be.upload.dto.UploadResponseDto;
+import com.time_tracker.be.utils.commons.ResponseModel;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;

@@ -1,8 +1,8 @@
 package com.time_tracker.be.security;
 
 import com.time_tracker.be.account.AccountModel;
-import com.time_tracker.be.common.TokenType;
 import com.time_tracker.be.exception.NotAuthorizedException;
+import com.time_tracker.be.utils.enums.TokenType;
 import io.jsonwebtoken.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;

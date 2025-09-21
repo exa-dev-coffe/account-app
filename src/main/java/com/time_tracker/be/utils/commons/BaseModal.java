@@ -1,4 +1,4 @@
-package com.time_tracker.be.common;
+package com.time_tracker.be.utils.commons;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
