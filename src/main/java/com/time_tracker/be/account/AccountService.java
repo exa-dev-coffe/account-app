@@ -7,7 +7,6 @@ import com.time_tracker.be.account.dto.CurrentUserDto;
 import com.time_tracker.be.account.dto.MeResponseDto;
 import com.time_tracker.be.account.dto.TokenResponseDto;
 import com.time_tracker.be.account.projection.AccountProjection;
-import com.time_tracker.be.account.projection.BaristaProjection;
 import com.time_tracker.be.exception.BadRequestException;
 import com.time_tracker.be.exception.NotFoundException;
 import com.time_tracker.be.exception.TooManyRequestException;
@@ -19,15 +18,18 @@ import com.time_tracker.be.security.JwtTokenProvider;
 import com.time_tracker.be.tokenResetPassword.ResetTokenPasswordService;
 import com.time_tracker.be.utils.GoogleTokenUtils;
 import com.time_tracker.be.utils.PasswordUtils;
+import com.time_tracker.be.utils.commons.GenericSpecification;
 import com.time_tracker.be.utils.commons.PaginationResponseDto;
 import com.time_tracker.be.utils.commons.ResponseModel;
 import com.time_tracker.be.utils.enums.TokenType;
 import io.jsonwebtoken.Claims;
+import jakarta.persistence.criteria.Predicate;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -294,10 +296,23 @@ public class AccountService {
                 .body(response);
     }
 
-    public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, String search) {
+    public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, String searchValue, String searchKey) {
         RoleModel barista = new RoleModel();
         barista.setRoleId(3);
-        Page<BaristaProjection> data = this.accountRepository.findByRoleAndEmailLikeIgnoreCase(barista, "%" + search + "%", pageable);
+        Specification<AccountModel> spec = Specification
+                .where((root, query, cb) -> {
+                    // Predicate untuk role
+                    Predicate rolePredicate = cb.equal(root.get("role").get("roleId"), barista.getRoleId());
+
+                    // Predicate untuk dynamic filter (dari GenericSpecification)
+                    Predicate dynamicPredicate = GenericSpecification.<AccountModel>dynamicFilter(searchKey, searchValue)
+                            .toPredicate(root, query, cb);
+
+                    // Gabung dengan OR atau AND sesuai kebutuhan
+                    return cb.and(rolePredicate, dynamicPredicate); // pakai AND
+                });
+
+        Page<AccountModel> data = accountRepository.findAll(spec, pageable);
         Page<BaristaResponseDto> responseData = data.map(baristaData -> {
             BaristaResponseDto dto = new BaristaResponseDto();
             dto.setUserId(baristaData.getUserId());

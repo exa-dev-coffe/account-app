@@ -89,8 +89,8 @@ public class AccountRoute {
     }
 
     @GetMapping("/barista/list-barista")
-    public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(@Valid Pageable pageable, @Param("search") String search) {
-        return accountService.listBarista(pageable, search);
+    public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, @Param("searchValue") String searchValue, @Param("searchKey") String searchKey) {
+        return accountService.listBarista(pageable, searchValue, searchKey);
     }
 
     @PostMapping("/auth/forgot-password")

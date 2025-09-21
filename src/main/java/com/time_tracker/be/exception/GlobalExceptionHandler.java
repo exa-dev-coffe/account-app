@@ -3,6 +3,7 @@ package com.time_tracker.be.exception;
 import com.time_tracker.be.resolver.ConstraintMessageResolver;
 import com.time_tracker.be.utils.commons.ResponseModel;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -115,6 +116,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ResponseModel<Map<String, Object>>> handleTooManyRequestException(TooManyRequestException ex) {
         ResponseModel<Map<String, Object>> body = this.handleException(ex);
         return ResponseEntity.status(ex.getStatusCode()).body(body);
+    }
+
+    @ExceptionHandler(InvalidDataAccessApiUsageException.class)
+    public ResponseEntity<ResponseModel<Map<String, Object>>> handleInvalidDataAccessApiUsageException(InvalidDataAccessApiUsageException ex) {
+        ResponseModel<Map<String, Object>> body = this.handleException(ex);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     private ResponseModel<Map<String, Object>> handleException(Exception ex) {
