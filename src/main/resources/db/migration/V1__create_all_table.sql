@@ -4,7 +4,7 @@ CREATE TABLE tm_roles
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW() NOT NULL,
     created_by INTEGER,
     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW() NOT NULL,
-    updated_by INTEGER                                   NOT NULL,
+    updated_by INTEGER,
     role_name  VARCHAR(255)                              NOT NULL,
     CONSTRAINT pk_tm_roles PRIMARY KEY (role_id)
 );
@@ -18,7 +18,7 @@ CREATE TABLE tm_accounts
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW() NOT NULL,
     created_by INTEGER,
     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW() NOT NULL,
-    updated_by INTEGER                                   NOT NULL,
+    updated_by INTEGER,
     email      VARCHAR(255)                              NOT NULL,
     password   VARCHAR(255)                              NOT NULL,
     full_name  VARCHAR(255)                              NOT NULL,

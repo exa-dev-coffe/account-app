@@ -351,7 +351,7 @@ public class AccountService {
                 .secure(true)
                 .path("/")
                 .maxAge(maxAge)
-                .sameSite("Strict")
+                .sameSite("None")
                 .build();
     }
 
