@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.UUID;
+
 @Slf4j
 @Service
 public class UploadService {
@@ -29,7 +31,15 @@ public class UploadService {
             throw new BadRequestException("File tidak valid. Pastikan file adalah gambar (JPEG, PNG) dan ukuran maksimal 5MB.");
         }
         try {
-            String objectName = "coffe/images/profiles/" + System.currentTimeMillis() + file.getOriginalFilename();
+            // random word  di ujungnya ambil extensionnya
+            String originalName = file.getOriginalFilename();
+            String ext = "";
+            if (originalName != null && originalName.contains(".")) {
+                ext = originalName.substring(originalName.lastIndexOf("."));
+            } else {
+                ext = ".jpg"; // default extension
+            }
+            String objectName = "coffe/images/profiles/" + System.currentTimeMillis() + UUID.randomUUID() + ext;
             String url = minioService.uploadFile(file, objectName);
             UploadResponseDto data = new UploadResponseDto();
             data.setUrl(url);

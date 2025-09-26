@@ -64,3 +64,13 @@ CREATE TABLE tm_refresh_tokens
 
 ALTER TABLE tm_refresh_tokens
     ADD CONSTRAINT FK_TM_REFRESH_TOKENS_ON_USER FOREIGN KEY (user_id) REFERENCES tm_accounts (user_id);
+
+INSERT INTO tm_roles (role_id,role_name)
+VALUES
+    (1,'admin'),
+    (2,'user'),
+    (3,'barista');
+
+INSERT INTO tm_accounts (user_id,email,password,full_name,role_id)
+VALUES
+    (1,'admin@gmail.com','$2a$10$dYCtQhjGwsMPxHaDT13BM.OchmFHLLZR11YLjq8x9ZMcyuzw.72mK','Super  Admin',1);
