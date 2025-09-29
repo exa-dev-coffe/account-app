@@ -1,8 +1,8 @@
 package com.time_tracker.be.resolver;
 
-import com.time_tracker.be.account.dto.CurrentUserDto;
 import com.time_tracker.be.annotation.CurrentUser;
 import com.time_tracker.be.lib.JwtService;
+import com.time_tracker.be.utils.commons.CurrentUserDto;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;

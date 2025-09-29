@@ -1,4 +1,4 @@
-package com.time_tracker.be.account.dto;
+package com.time_tracker.be.utils.commons;
 
 import lombok.Data;
 

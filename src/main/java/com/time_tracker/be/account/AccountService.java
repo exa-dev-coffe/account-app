@@ -3,7 +3,6 @@ package com.time_tracker.be.account;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.time_tracker.be.account.dto.BaristaResponseDto;
-import com.time_tracker.be.account.dto.CurrentUserDto;
 import com.time_tracker.be.account.dto.MeResponseDto;
 import com.time_tracker.be.account.dto.TokenResponseDto;
 import com.time_tracker.be.account.projection.AccountProjection;
@@ -18,6 +17,7 @@ import com.time_tracker.be.role.RoleModel;
 import com.time_tracker.be.tokenResetPassword.ResetTokenPasswordService;
 import com.time_tracker.be.utils.GoogleTokenUtils;
 import com.time_tracker.be.utils.PasswordUtils;
+import com.time_tracker.be.utils.commons.CurrentUserDto;
 import com.time_tracker.be.utils.commons.GenericSpecification;
 import com.time_tracker.be.utils.commons.PaginationResponseDto;
 import com.time_tracker.be.utils.commons.ResponseModel;
@@ -112,7 +112,7 @@ public class AccountService {
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
-    public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name, Integer type) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name, Integer userId, Integer type) {
         AccountModel user = new AccountModel();
         RoleModel role = new RoleModel();
         role.setRoleId(type);
@@ -121,6 +121,7 @@ public class AccountService {
         user.setEmail(email);
         user.setPassword(PasswordUtils.hashPassword(password));
         user.setPhoto(null);
+        user.setCreatedBy(userId);
         this.accountRepository.save(user);
         TokenResponseDto data = this.createTokenResponse(user);
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
@@ -167,7 +168,7 @@ public class AccountService {
         } else {
             TokenResponseDto data = this.createTokenResponse(user);
             this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
-            this.refreshTokenService.deleteRefreshToken(refreshToken, user);
+            this.refreshTokenService.deleteRefreshTokenByToken(refreshToken);
             ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
 
             ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token berhasil", data);
@@ -184,7 +185,7 @@ public class AccountService {
         }
         Claims claims = jwtService.getClaims(refreshToken);
         AccountModel user = this.accountRepository.findByUserId(Integer.parseInt(claims.get("userId").toString()));
-        this.refreshTokenService.deleteRefreshToken(refreshToken, user);
+        this.refreshTokenService.deleteRefreshTokenByToken(refreshToken);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", "", 0); // expire the cookie
         ResponseModel<Object> response = new ResponseModel<>(true, "Logout berhasil", null);
         return ResponseEntity.status(HttpStatus.OK)
@@ -332,8 +333,26 @@ public class AccountService {
         ResponseModel<PaginationResponseDto<BaristaResponseDto>> response = new ResponseModel<>(true, "Data barista ditemukan", responsePagination);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
+    }
 
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> deleteBarista(Integer baristaId) {
+        AccountModel user = this.accountRepository.findById(baristaId).orElse(null);
 
+        if (user == null) {
+            throw new NotFoundException("User tidak ditemukan");
+        }
+
+        if (user.getRole().getRoleId() != 3) {
+            throw new BadRequestException("User bukan barista");
+        }
+
+        this.refreshTokenService.deleteRefreshTokenByUser(user);
+        this.accountRepository.delete(user);
+
+        ResponseModel<String> response = new ResponseModel<>(true, "Barista berhasil dihapus", null);
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(response);
     }
 
     private TokenResponseDto createTokenResponse(AccountModel user) {

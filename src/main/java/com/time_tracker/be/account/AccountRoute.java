@@ -3,6 +3,7 @@ package com.time_tracker.be.account;
 import com.time_tracker.be.account.dto.*;
 import com.time_tracker.be.annotation.CurrentUser;
 import com.time_tracker.be.annotation.RequireAuth;
+import com.time_tracker.be.utils.commons.CurrentUserDto;
 import com.time_tracker.be.utils.commons.PaginationResponseDto;
 import com.time_tracker.be.utils.commons.ResponseModel;
 import jakarta.servlet.http.Cookie;
@@ -74,12 +75,12 @@ public class AccountRoute {
 
     @PostMapping("/auth/register")
     public ResponseEntity<ResponseModel<TokenResponseDto>> register(@Valid @RequestBody RegisterRequestDto registerRequest) {
-        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), 2);
+        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), null, 2);
     }
 
     @PostMapping("/barista/register-barista")
-    public ResponseEntity<ResponseModel<TokenResponseDto>> registerBarista(@Valid @RequestBody RegisterRequestDto registerRequest) {
-        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), 3);
+    public ResponseEntity<ResponseModel<TokenResponseDto>> registerBarista(@CurrentUser CurrentUserDto currentUser, @Valid @RequestBody RegisterRequestDto registerRequest) {
+        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), currentUser.getUserId(), 3);
     }
 
     @GetMapping("/me")
@@ -91,6 +92,14 @@ public class AccountRoute {
     @GetMapping("/barista/list-barista")
     public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, @Param("searchValue") String searchValue, @Param("searchKey") String searchKey) {
         return accountService.listBarista(pageable, searchValue, searchKey);
+    }
+
+    @DeleteMapping("/barista")
+    public ResponseEntity<ResponseModel<String>> deleteBarista(@RequestParam(name = "userId", required = false) Integer userId) {
+        if (userId == null) {
+            return ResponseEntity.badRequest().body(new ResponseModel<>(false, "UserId is required", null));
+        }
+        return accountService.deleteBarista(userId);
     }
 
     @PostMapping("/auth/forgot-password")

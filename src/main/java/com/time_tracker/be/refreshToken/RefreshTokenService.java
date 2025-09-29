@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+
 @Slf4j
 @Service
 public class RefreshTokenService {
@@ -31,14 +33,22 @@ public class RefreshTokenService {
         this.redisTemplate.opsForValue().set("refreshToken:" + refreshToken, accountCacheDto);
     }
 
-    public void deleteRefreshToken(String refreshToken, AccountModel accountModel) {
+    public void deleteRefreshTokenByToken(String refreshToken) {
         int deletedCount = this.refreshTokenRepository.deleteByToken(refreshToken);
         if (deletedCount == 0) {
-            log.warn("No refresh token found to delete for token: {} and userId: {}", refreshToken, accountModel.getUserId());
+            log.warn("No refresh token found to delete for token: {}", refreshToken);
         } else {
             this.redisTemplate.delete("refreshToken:" + refreshToken);
         }
     }
+
+    public void deleteRefreshTokenByUser(AccountModel user) {
+        int deletedCount = this.refreshTokenRepository.deleteByUserId(user);
+        if (deletedCount == 0) {
+            log.warn("No refresh tokens found to delete for user ID: {}", user.getUserId());
+        }
+    }
+
 
     public AccountCacheDto findByToken(String token, AccountModel user) {
         AccountCacheDto tokenOnRedis = (AccountCacheDto) this.redisTemplate.opsForValue().get("refreshToken:" + token);
@@ -53,7 +63,7 @@ public class RefreshTokenService {
             accountCacheDto.setEmail(user.getEmail());
             accountCacheDto.setFullName(user.getFullName());
             accountCacheDto.setRole(user.getRole().getRoleName());
-            this.redisTemplate.opsForValue().set("refreshToken:" + token, accountCacheDto);
+            this.redisTemplate.opsForValue().set("refreshToken:" + token, accountCacheDto, Duration.ofHours(1));
             return accountCacheDto;
         } else {
             return null;
