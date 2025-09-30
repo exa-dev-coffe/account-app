@@ -21,6 +21,7 @@ import com.time_tracker.be.utils.commons.CurrentUserDto;
 import com.time_tracker.be.utils.commons.GenericSpecification;
 import com.time_tracker.be.utils.commons.PaginationResponseDto;
 import com.time_tracker.be.utils.commons.ResponseModel;
+import com.time_tracker.be.utils.enums.ExchangeType;
 import com.time_tracker.be.utils.enums.TokenType;
 import io.jsonwebtoken.Claims;
 import jakarta.persistence.criteria.Predicate;
@@ -233,8 +234,10 @@ public class AccountService {
         String jsonMessage = mapper.writeValueAsString(emailPayload);
 
         this.rabbitmqService.sendMessage(
+                "Email Reset Password",
                 "emailQueue.resetPassword",
                 "",
+                ExchangeType.DIRECT,
                 null,
                 jsonMessage,
                 true,
@@ -281,8 +284,10 @@ public class AccountService {
         String jsonMessage = mapper.writeValueAsString(emailPayload);
 
         this.rabbitmqService.sendMessage(
+                "Email Reset Password Success",
                 "emailQueue.resetPasswordSuccess",
                 "",
+                ExchangeType.DIRECT,
                 null,
                 jsonMessage,
                 true,
