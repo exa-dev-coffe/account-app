@@ -5,11 +5,11 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import jakarta.annotation.PreDestroy;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-@Configuration
+@Component
 public class RabbitmqService {
 
     private final ConnectionFactory factory;
