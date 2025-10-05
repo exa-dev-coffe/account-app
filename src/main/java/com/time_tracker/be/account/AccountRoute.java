@@ -58,7 +58,7 @@ public class AccountRoute {
     }
 
     @PostMapping("/auth/logout")
-    public ResponseEntity<ResponseModel<Object>> logout(@RequestBody RefreshRequestDto refreshRequestDto, HttpServletRequest request) {
+    public ResponseEntity<ResponseModel<Object>> logout(@RequestBody(required = false) RefreshRequestDto refreshRequestDto, HttpServletRequest request) {
         String refreshToken = refreshRequestDto.getRefreshToken();
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
             Cookie[] cookies = request.getCookies();
