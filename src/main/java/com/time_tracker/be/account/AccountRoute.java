@@ -10,6 +10,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.http.ResponseEntity;
@@ -91,7 +92,12 @@ public class AccountRoute {
 
     @GetMapping("/barista/list-barista")
     public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, @Param("searchValue") String searchValue, @Param("searchKey") String searchKey) {
-        return accountService.listBarista(pageable, searchValue, searchKey);
+        // Kurangi 1, pastikan tidak negatif
+        int pageNumber = pageable.getPageNumber() > 0 ? pageable.getPageNumber() - 1 : 0;
+
+        // Buat Pageable baru
+        Pageable adjustedPageable = PageRequest.of(pageNumber, pageable.getPageSize(), pageable.getSort());
+        return accountService.listBarista(adjustedPageable, searchValue, searchKey);
     }
 
     @DeleteMapping("/barista")
