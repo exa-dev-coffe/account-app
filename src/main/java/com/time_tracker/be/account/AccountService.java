@@ -184,8 +184,6 @@ public class AccountService {
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
             throw new BadRequestException("Refresh token tidak ditemukan");
         }
-        Claims claims = jwtService.getClaims(refreshToken);
-        AccountModel user = this.accountRepository.findByUserId(Integer.parseInt(claims.get("userId").toString()));
         this.refreshTokenService.deleteRefreshTokenByToken(refreshToken);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", "", 0); // expire the cookie
         ResponseModel<Object> response = new ResponseModel<>(true, "Logout berhasil", null);

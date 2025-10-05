@@ -59,12 +59,17 @@ public class AccountRoute {
 
     @PostMapping("/auth/logout")
     public ResponseEntity<ResponseModel<Object>> logout(@RequestBody(required = false) RefreshRequestDto refreshRequestDto, HttpServletRequest request) {
-        String refreshToken = refreshRequestDto.getRefreshToken();
-        if (refreshToken == null || refreshToken.trim().isEmpty()) {
+        String refreshToken = null;
+
+        // ✅ Cek dari body kalau dikirim
+        if (refreshRequestDto != null && refreshRequestDto.getRefreshToken() != null && !refreshRequestDto.getRefreshToken().trim().isEmpty()) {
+            refreshToken = refreshRequestDto.getRefreshToken();
+        } else {
+            // ✅ Kalau body kosong, ambil dari cookie
             Cookie[] cookies = request.getCookies();
             if (cookies != null) {
                 for (Cookie cookie : cookies) {
-                    if (cookie.getName().equals("refreshToken")) {
+                    if ("refreshToken".equals(cookie.getName())) {
                         refreshToken = cookie.getValue();
                         break;
                     }
