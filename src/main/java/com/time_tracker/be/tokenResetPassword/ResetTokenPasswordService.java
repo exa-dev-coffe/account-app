@@ -30,6 +30,7 @@ public class ResetTokenPasswordService {
         ResetTokenPasswordModel existingToken = resetTokenPasswordRepository.findByToken(resetToken);
         if (existingToken != null && !existingToken.isUsed()) {
             existingToken.setUsed(true);
+            existingToken.setUpdatedAt(new Date());
             resetTokenPasswordRepository.save(existingToken);
         } else {
             throw new BadRequestException("Reset Token does not exist or has already been used");

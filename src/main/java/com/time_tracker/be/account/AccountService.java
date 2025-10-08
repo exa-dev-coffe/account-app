@@ -368,6 +368,8 @@ public class AccountService {
 
         user.setFullName(fullName);
         user.setPhoto(photo);
+        user.setUpdatedAt(new Date());
+        user.setUpdatedBy(userId);
         this.accountRepository.save(user);
 
         TokenResponseDto data = this.createTokenResponse(user);
