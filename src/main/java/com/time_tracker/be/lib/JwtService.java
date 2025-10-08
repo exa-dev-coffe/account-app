@@ -34,6 +34,7 @@ public class JwtService {
         claims.put("userId", user.getUserId());
         claims.put("type", type.name());
         claims.put("role", user.getRole().getRoleName());
+        claims.put("photo", user.getPhoto());
         return claims;
     }
 

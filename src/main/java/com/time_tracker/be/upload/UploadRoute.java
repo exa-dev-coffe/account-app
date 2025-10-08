@@ -24,7 +24,7 @@ public class UploadRoute {
         return uploadService.uploadProfile(file);
     }
 
-    @DeleteMapping("/delete")
+    @DeleteMapping("/delete-profile")
     @RequireAuth
     public ResponseEntity<ResponseModel<String>> deleteFile(@RequestParam("url") String objectName) {
         return uploadService.deleteFile(objectName);

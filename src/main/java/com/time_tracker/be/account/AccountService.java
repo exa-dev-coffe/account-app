@@ -358,6 +358,29 @@ public class AccountService {
                 .body(response);
     }
 
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<TokenResponseDto>> updateUser(String refreshToken, Integer userId, String fullName, String photo) {
+        AccountModel user = this.accountRepository.findById(userId).orElse(null);
+
+        if (user == null) {
+            throw new NotFoundException("User tidak ditemukan");
+        }
+
+        user.setFullName(fullName);
+        user.setPhoto(photo);
+        this.accountRepository.save(user);
+
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.deleteRefreshTokenByToken(refreshToken);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "User berhasil diupdate", data);
+        return ResponseEntity.status(HttpStatus.OK)
+                .header("Set-Cookie", cookie.toString())
+                .body(response);
+    }
+
     private TokenResponseDto createTokenResponse(AccountModel user) {
         String accessToken = jwtService.createToken(user, TokenType.ACCESS);
         String refreshToken = jwtService.createToken(user, TokenType.REFRESH);

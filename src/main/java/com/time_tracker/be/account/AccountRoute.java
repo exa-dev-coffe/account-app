@@ -3,6 +3,7 @@ package com.time_tracker.be.account;
 import com.time_tracker.be.account.dto.*;
 import com.time_tracker.be.annotation.CurrentUser;
 import com.time_tracker.be.annotation.RequireAuth;
+import com.time_tracker.be.annotation.RequireRole;
 import com.time_tracker.be.utils.commons.CurrentUserDto;
 import com.time_tracker.be.utils.commons.PaginationResponseDto;
 import com.time_tracker.be.utils.commons.ResponseModel;
@@ -85,6 +86,7 @@ public class AccountRoute {
     }
 
     @PostMapping("/barista/register-barista")
+    @RequireRole({"admin"})
     public ResponseEntity<ResponseModel<TokenResponseDto>> registerBarista(@CurrentUser CurrentUserDto currentUser, @Valid @RequestBody RegisterRequestDto registerRequest) {
         return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), currentUser.getUserId(), 3);
     }
@@ -96,6 +98,7 @@ public class AccountRoute {
     }
 
     @GetMapping("/barista/list-barista")
+    @RequireRole({"admin"})
     public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, @Param("searchValue") String searchValue, @Param("searchKey") String searchKey) {
         // Kurangi 1, pastikan tidak negatif
         int pageNumber = pageable.getPageNumber() > 0 ? pageable.getPageNumber() - 1 : 0;
@@ -106,6 +109,7 @@ public class AccountRoute {
     }
 
     @DeleteMapping("/barista")
+    @RequireRole({"admin"})
     public ResponseEntity<ResponseModel<String>> deleteBarista(@RequestParam(name = "userId", required = false) Integer userId) {
         if (userId == null) {
             return ResponseEntity.badRequest().body(new ResponseModel<>(false, "UserId is required", null));
@@ -121,6 +125,29 @@ public class AccountRoute {
     @PostMapping("/auth/change-password")
     public ResponseEntity<ResponseModel<String>> resetPassword(@Valid @RequestBody ResetPasswordRequestDto resetPasswordRequest) throws Exception {
         return accountService.resetPassword(resetPasswordRequest.getToken(), resetPasswordRequest.getPassword());
+    }
+
+    @PatchMapping("/update-profile")
+    @RequireAuth
+    public ResponseEntity<ResponseModel<TokenResponseDto>> updateProfile(HttpServletRequest request, @CurrentUser CurrentUserDto currentUser, @Valid @RequestBody UpdateProfileRequestDto updateProfileRequest) {
+        String refreshToken = null;
+
+        // ✅ Cek dari body kalau dikirim
+        if (updateProfileRequest.getRefreshToken() != null && !updateProfileRequest.getRefreshToken().trim().isEmpty()) {
+            refreshToken = updateProfileRequest.getRefreshToken();
+        } else {
+            // ✅ Kalau body kosong, ambil dari cookie
+            Cookie[] cookies = request.getCookies();
+            if (cookies != null) {
+                for (Cookie cookie : cookies) {
+                    if ("refreshToken".equals(cookie.getName())) {
+                        refreshToken = cookie.getValue();
+                        break;
+                    }
+                }
+            }
+        }
+        return accountService.updateUser(refreshToken, currentUser.getUserId(), updateProfileRequest.getFullName(), updateProfileRequest.getPhoto());
     }
 
 
