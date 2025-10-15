@@ -60,11 +60,8 @@ public class RabbitmqService {
 
         switch (exchangeType) {
             case FANOUT:
-                // FANOUT: kirim ke semua queue yg sudah bind, producer ga perlu declare queue
-                channel.basicPublish(exchange, "", properties, message.getBytes());
-                break;
-
             case HEADERS:
+                // FANOUT: kirim ke semua queue yg sudah bind, producer ga perlu declare queue
                 // HEADERS: sama, producer hanya publish
                 channel.basicPublish(exchange, "", properties, message.getBytes());
                 break;
