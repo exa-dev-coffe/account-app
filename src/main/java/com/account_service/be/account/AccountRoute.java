@@ -28,7 +28,7 @@ public class AccountRoute {
     }
 
     @PostMapping("/auth/login")
-    public ResponseEntity<ResponseModel<TokenResponseDto>> login(@Valid @RequestBody LoginRequestDto loginRequest) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> login(@RequestBody(required = false) LoginRequestDto loginRequest) {
         return accountService.login(loginRequest.getEmail(), loginRequest.getPassword());
     }
 
