@@ -2,6 +2,7 @@ package com.account_service.be.account;
 
 import com.account_service.be.account.dto.BaristaResponseDto;
 import com.account_service.be.account.dto.MeResponseDto;
+import com.account_service.be.account.dto.NamesResponseDto;
 import com.account_service.be.account.dto.TokenResponseDto;
 import com.account_service.be.account.projection.AccountProjection;
 import com.account_service.be.exception.BadRequestException;
@@ -38,6 +39,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -381,6 +383,10 @@ public class AccountService {
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
+    }
+
+    public List<NamesResponseDto> getNamesByUserIds(Integer[] userIds) {
+        return this.accountRepository.findByUserIdIn(userIds);
     }
 
     private TokenResponseDto createTokenResponse(AccountModel user) {
