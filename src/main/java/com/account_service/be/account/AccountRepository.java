@@ -1,8 +1,11 @@
 package com.account_service.be.account;
 
+import com.account_service.be.account.dto.NamesResponseDto;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
+
+import java.util.List;
 
 @Repository
 public interface AccountRepository extends JpaRepository<AccountModel, Integer>, JpaSpecificationExecutor<AccountModel> {
@@ -13,5 +16,7 @@ public interface AccountRepository extends JpaRepository<AccountModel, Integer>,
 
     // Ambil projection/DTO fleksibel
     <T> T findByUserId(Integer userId, Class<T> type);
+
+    List<NamesResponseDto> findByUserIdIn(Integer[] userIds);
 
 }
