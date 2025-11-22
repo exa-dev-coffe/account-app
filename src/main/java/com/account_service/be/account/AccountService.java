@@ -6,6 +6,7 @@ import com.account_service.be.account.dto.NamesResponseDto;
 import com.account_service.be.account.dto.TokenResponseDto;
 import com.account_service.be.account.projection.AccountProjection;
 import com.account_service.be.exception.BadRequestException;
+import com.account_service.be.exception.NotAuthorizedException;
 import com.account_service.be.exception.NotFoundException;
 import com.account_service.be.exception.TooManyRequestException;
 import com.account_service.be.lib.JwtService;
@@ -143,10 +144,14 @@ public class AccountService {
 
         Claims claims = jwtService.getClaims(refreshToken);
 
-        boolean isExpired = claims.getExpiration().before(new Date());
-
         if (!claims.get("type").equals(TokenType.REFRESH.name())) {
             throw new BadRequestException("Refresh token tidak valid");
+        }
+
+        boolean isExpired = claims.getExpiration().before(new Date());
+
+        if (isExpired) {
+            throw new NotAuthorizedException("Refresh token telah kedaluwarsa");
         }
 
         AccountModel user = this.accountRepository.findByUserId(Integer.parseInt(claims.get("userId").toString()));
@@ -160,7 +165,9 @@ public class AccountService {
             throw new BadRequestException("Refresh token tidak valid ");
         }
 
-        if (!isExpired) {
+        boolean isWillBeExpired = claims.getExpiration().before(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 3000)); // 3 days
+
+        if (!isWillBeExpired) {
             String newAccessToken = jwtService.createToken(user, TokenType.ACCESS);
             TokenResponseDto data = new TokenResponseDto();
             data.setAccessToken(newAccessToken);
