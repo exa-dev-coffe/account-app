@@ -44,6 +44,7 @@ public class JwtService {
             case ACCESS -> new Date(now + 1000L * 60 * 15); // 15 menit
             case REFRESH -> new Date(now + 1000L * 60 * 60 * 24 * 7); // 7 hari
             case RESET_PASSWORD -> new Date(now + 1000L * 60 * 5); // 5 menit
+            case EXCHANGE -> new Date(now + 1000L * 60 * 10); // 3 menit
             default -> throw new IllegalArgumentException("Unknown token type: " + type);
         };
     }

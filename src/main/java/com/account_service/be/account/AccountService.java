@@ -33,6 +33,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -49,18 +50,22 @@ public class AccountService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final String CLIENT_ID;
+    private final String CLIENT_SECRET;
     private final RabbitmqService rabbitmqService;
     private final String frontendUrl;
     private final ResetTokenPasswordService resetTokenPasswordService;
+    private final RedisTemplate<String, Object> redisTemplate;
 
-    public AccountService(AccountRepository accountRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService) {
+    public AccountService(AccountRepository accountRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService, RedisTemplate<String, Object> redisTemplate, @Value("${spring.security.oauth2.authorizationserver.client.google.client-secret}") String clientSecret) {
         this.accountRepository = accountRepository;
         this.resetTokenPasswordService = resetTokenPasswordService;
         this.rabbitmqService = rabbitmqService;
+        this.CLIENT_SECRET = clientSecret;
         this.refreshTokenService = refreshTokenService;
         this.jwtService = jwtService;
         this.CLIENT_ID = clientId;
         this.frontendUrl = frontendUrl;
+        this.redisTemplate = redisTemplate;
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
@@ -87,32 +92,64 @@ public class AccountService {
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
-    public ResponseEntity<ResponseModel<TokenResponseDto>> loginWithGoogle(String idTokenString) throws Exception {
-        GoogleIdToken.Payload payload = GoogleTokenUtils.verifyGoogleToken(idTokenString);
-        String email = (String) payload.get("email");
-        boolean emailVerified = Boolean.parseBoolean((String) payload.get("email_verified"));
-        String aud = (String) payload.get("aud");
-
-        if (!emailVerified) {
-            throw new BadRequestException("Email tidak terverifikasi");
+    public ResponseEntity<ResponseModel<TokenResponseDto>> loginGoogle(String tokenTemp) throws Exception {
+        Object tempTokenObj = redisTemplate.opsForValue().get("exchangeToken:" + tokenTemp);
+        if (tempTokenObj == null) {
+            throw new NotAuthorizedException("Token temporary tidak valid atau telah kedaluwarsa");
         }
+        TokenResponseDto data = (TokenResponseDto) tempTokenObj;
+        redisTemplate.delete("exchangeToken:" + tokenTemp);
 
-        if (!CLIENT_ID.equals(aud)) {
-            throw new BadRequestException("Invalid audience");
-        }
-
-        AccountModel user = this.accountRepository.findByEmail(email);
-        if (user == null) {
-            throw new NotFoundException("Email tidak ditemukan");
-        }
-
-        TokenResponseDto data = this.createTokenResponse(user);
-        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), this.accountRepository.findByUserId(jwtService.getClaims(data.getAccessToken()).get("userId", Integer.class)));
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
         ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login berhasil", data);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public String loginGoogleCallback(String code, String redirectUrl) throws Exception {
+
+        String idTokenString = GoogleTokenUtils.exchangeCodeForTokens(code, CLIENT_ID, CLIENT_SECRET, redirectUrl);
+
+        GoogleIdToken.Payload payload = GoogleTokenUtils.verifyGoogleToken(idTokenString, CLIENT_ID);
+
+        String email = (String) payload.get("email");
+        boolean emailVerified = (boolean) payload.get("email_verified");
+        String aud = (String) payload.get("aud");
+
+        if (!emailVerified) {
+            throw new Exception("Email tidak terverifikasi");
+        }
+
+        if (!CLIENT_ID.equals(aud)) {
+            throw new Exception("Invalid audience");
+        }
+
+        try {
+
+            AccountModel user = this.accountRepository.findByEmail(email);
+            if (user == null) {
+                throw new Exception("Email tidak ditemukan");
+            }
+            // generate token for authorize call back temporary 5 minutes to exchange to real token
+            String tokenTemporary = jwtService.createToken(user, TokenType.EXCHANGE);
+
+            TokenResponseDto data = this.createTokenResponse(user);
+
+            redisTemplate.opsForValue().set("exchangeToken:" + tokenTemporary, data, java.time.Duration.ofMinutes(5));
+
+            return tokenTemporary;
+        } catch (Exception e) {
+            if (e.getMessage().equals("Email tidak ditemukan") || e.getMessage().equals("Invalid audience") || e.getMessage().equals("Email tidak terverifikasi") || e.getMessage().equals("Google login failed. Please try again.")) {
+                throw e;
+            } else {
+                log.error("Error during Google login callback: {}", e.getMessage());
+                throw new Exception("Google login failed. Please try again.");
+            }
+        }
+
     }
 
     @Transactional(Transactional.TxType.REQUIRED)

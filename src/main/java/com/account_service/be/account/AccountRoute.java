@@ -9,19 +9,31 @@ import com.account_service.be.utils.commons.PaginationResponseDto;
 import com.account_service.be.utils.commons.ResponseModel;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 @Slf4j
 @RestController
 @RequestMapping("/api/1.0")
 public class AccountRoute {
     private final AccountService accountService;
+    @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}")
+    private String CLIENT_ID;
+    @Value("${app.frontend.url}")
+    private String FRONTEND_URL;
+    @Value("${app.base-url}")
+    private String BASE_URL;
 
     public AccountRoute(AccountService accountService) {
         this.accountService = accountService;
@@ -32,10 +44,41 @@ public class AccountRoute {
         return accountService.login(loginRequest.getEmail(), loginRequest.getPassword());
     }
 
-    @PostMapping("/auth/login-by-google")
-    public ResponseEntity<ResponseModel<TokenResponseDto>> loginWithGoogle(@RequestBody LoginGoogleRequestDto loginRequest) throws Exception {
-        return accountService.loginWithGoogle(loginRequest.getToken());
+    @GetMapping("/auth/google/callback")
+    public void loginGoogleCallback(HttpServletResponse response, @Param("code") String code) throws Exception {
+        try {
+
+            String redirectUri = BASE_URL + "/api/1.0/auth/google/callback";
+            String res = accountService.loginGoogleCallback(code, redirectUri);
+            response.sendRedirect(FRONTEND_URL + "/login?token_temp=" + res);
+        } catch (Exception e) {
+            String encodedError = URLEncoder.encode(e.getMessage(), StandardCharsets.UTF_8);
+            response.sendRedirect(FRONTEND_URL + "/login?error=" + encodedError);
+        }
     }
+
+    @PostMapping("/auth/google/login")
+    public ResponseEntity<ResponseModel<TokenResponseDto>> loginGoogle(@RequestBody GoogleLoginRequestDto googleLoginRequest) throws Exception {
+        return accountService.loginGoogle(googleLoginRequest.getTokenTemp());
+    }
+
+    @GetMapping("/auth/google")
+    public void redirectToGoogle(HttpServletResponse response) throws IOException {
+
+        // Build redirect URI
+        String redirectUri = BASE_URL + "/api/1.0/auth/google/callback";
+
+        String oauthUrl = "https://accounts.google.com/o/oauth2/v2/auth" +
+                "?client_id=" + CLIENT_ID +
+                "&redirect_uri=" + redirectUri +
+                "&response_type=code" +
+                "&scope=openid email profile" +
+                "&access_type=offline" +
+                "&prompt=select_account";
+
+        response.sendRedirect(oauthUrl);
+    }
+
 
     @PostMapping("/auth/refresh")
     public ResponseEntity<ResponseModel<TokenResponseDto>> refreshToken(@RequestBody(required = false) RefreshRequestDto refreshRequestDto, HttpServletRequest request) {

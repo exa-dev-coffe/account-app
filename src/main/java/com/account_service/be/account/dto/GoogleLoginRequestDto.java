@@ -4,8 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
-public class LoginGoogleRequestDto {
+public class GoogleLoginRequestDto {
+    @NotBlank(message = "Token cannot be empty")
+    private String tokenTemp;
 
-    @NotBlank(message = "Code cannot be empty")
-    private String code;
 }

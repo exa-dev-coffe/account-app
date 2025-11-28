@@ -6,6 +6,7 @@ import lombok.Getter;
 public enum TokenType {
     ACCESS("access"),
     REFRESH("refresh"),
+    EXCHANGE("exchange"),
     RESET_PASSWORD("reset_password");
 
     private final String value;
