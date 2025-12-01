@@ -280,7 +280,7 @@ public class AccountService {
         this.rabbitmqService.sendMessage(
                 "Email Reset Password",
                 "emailQueue.resetPassword",
-                "",
+                "email.queue",
                 ExchangeType.DIRECT,
                 null,
                 jsonMessage,
@@ -330,7 +330,7 @@ public class AccountService {
         this.rabbitmqService.sendMessage(
                 "Email Reset Password Success",
                 "emailQueue.resetPasswordSuccess",
-                "",
+                "email.queue",
                 ExchangeType.DIRECT,
                 null,
                 jsonMessage,
