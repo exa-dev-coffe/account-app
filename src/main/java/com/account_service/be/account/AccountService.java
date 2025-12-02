@@ -303,7 +303,7 @@ public class AccountService {
         boolean isExpired = claims.getExpiration().before(new Date());
 
         if (isExpired) {
-            throw new BadRequestException("Token expired");
+            throw new BadRequestException("Token expired, Please request a new password reset.");
         }
 
         if (!claims.get("type").equals(TokenType.RESET_PASSWORD.name())) {
