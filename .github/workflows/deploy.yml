@@ -2,17 +2,17 @@ name: Build & Deploy SSE Gateway to VPS via GHCR
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-     
+
     # Biar bisa push commit
     permissions:
       contents: write
       pull-requests: read
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -105,14 +105,14 @@ jobs:
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p 31080 -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-          
+
           ssh -p 31080 -i ~/.ssh/id_ed25519 deploy@${{ secrets.VPS_HOST }} << EOF
-          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-          
+          export KUBECONFIG=/home/deploy/.kube/config
+
           # Patch the deployment to use the new SHA tag
           kubectl set image deployment/account-service-coffe -n dev-coffe \
            account-service-coffe=ghcr.io/${{ github.repository_owner }}/account-service-coffe:${{ steps.vars.outputs.sha }}
-          
+
           # Optional: show rollout
           # kubectl rollout status deployment/account-service-coffe -n dev-coffe
           EOF
