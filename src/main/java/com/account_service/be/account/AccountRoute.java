@@ -125,13 +125,28 @@ public class AccountRoute {
 
     @PostMapping("/auth/register")
     public ResponseEntity<ResponseModel<TokenResponseDto>> register(@Valid @RequestBody RegisterRequestDto registerRequest) {
-        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), null, 2);
+        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), null, 2, registerRequest.getCode());
+    }
+
+    @PostMapping("/auth/register/send-code")
+    public ResponseEntity<ResponseModel<Object>> sendVerificationCode(@Valid @RequestBody SendCodeRequestDto sendCodeRequest) throws Exception {
+        return accountService.sendVerificationCode(sendCodeRequest.getEmail());
+    }
+
+    @PostMapping("/auth/google")
+    public ResponseEntity<ResponseModel<Object>> loginGooglePopup(@Valid @RequestBody GoogleCodeRequestDto request) throws Exception {
+        return accountService.loginGooglePopup(request.getCode());
+    }
+
+    @PostMapping("/auth/google/register")
+    public ResponseEntity<ResponseModel<TokenResponseDto>> googleRegister(@Valid @RequestBody GoogleRegisterRequestDto request) throws Exception {
+        return accountService.googleRegister(request.getRegistrationToken(), request.getPassword());
     }
 
     @PostMapping("/barista/register-barista")
     @RequireRole({"admin"})
     public ResponseEntity<ResponseModel<TokenResponseDto>> registerBarista(@CurrentUser CurrentUserDto currentUser, @Valid @RequestBody RegisterRequestDto registerRequest) {
-        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), currentUser.getUserId(), 3);
+        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), currentUser.getUserId(), 3, null);
     }
 
     @GetMapping("/me")

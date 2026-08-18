@@ -45,6 +45,7 @@ public class JwtService {
             case REFRESH -> new Date(now + 1000L * 60 * 60 * 24 * 7); // 7 hari
             case RESET_PASSWORD -> new Date(now + 1000L * 60 * 5); // 5 menit
             case EXCHANGE -> new Date(now + 1000L * 60 * 10); // 3 menit
+            case REGISTRATION -> new Date(now + 1000L * 60 * 15); // 15 menit
             default -> throw new IllegalArgumentException("Unknown token type: " + type);
         };
     }
@@ -56,6 +57,25 @@ public class JwtService {
                 .setSubject(user.getEmail())
                 .setIssuedAt(new Date())
                 .setExpiration(getExpirationDate(type))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
+                .compact();
+    }
+
+    // Membuat token JWT pendaftaran sementara untuk Google
+    public String createRegistrationToken(String email, String fullName) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("email", email);
+        claims.put("fullName", fullName);
+        claims.put("type", TokenType.REGISTRATION.name());
+
+        long now = System.currentTimeMillis();
+        Date expiration = new Date(now + 1000L * 60 * 15); // 15 menit
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(email)
+                .setIssuedAt(new Date())
+                .setExpiration(expiration)
                 .signWith(getSigningKey(), SignatureAlgorithm.HS512)
                 .compact();
     }

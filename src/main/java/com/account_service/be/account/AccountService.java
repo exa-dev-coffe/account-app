@@ -153,7 +153,25 @@ public class AccountService {
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
-    public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name, Integer userId, Integer type) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name, Integer userId, Integer type, String code) {
+        AccountModel existingUser = this.accountRepository.findByEmail(email);
+        if (existingUser != null) {
+            throw new BadRequestException("Email sudah terdaftar");
+        }
+
+        // If type == 2 (Customer registration), we require code verification
+        if (type == 2) {
+            if (code == null || code.trim().isEmpty()) {
+                throw new BadRequestException("Kode verifikasi wajib diisi");
+            }
+            String codeKey = "register:code:" + email;
+            Object savedCode = redisTemplate.opsForValue().get(codeKey);
+            if (savedCode == null || !savedCode.toString().equals(code)) {
+                throw new BadRequestException("Kode verifikasi salah atau telah kedaluwarsa");
+            }
+            redisTemplate.delete(codeKey);
+        }
+
         AccountModel user = new AccountModel();
         RoleModel role = new RoleModel();
         role.setRoleId(type);
@@ -167,6 +185,148 @@ public class AccountService {
         TokenResponseDto data = this.createTokenResponse(user);
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
         ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Registrasi berhasil", data);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .header("Set-Cookie", cookie.toString())
+                .body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<Object>> sendVerificationCode(String email) throws Exception {
+        AccountModel existingUser = this.accountRepository.findByEmail(email);
+        if (existingUser != null) {
+            throw new BadRequestException("Email sudah terdaftar");
+        }
+
+        String sendCountKey = "register:sendCount:" + email;
+        Object countObj = redisTemplate.opsForValue().get(sendCountKey);
+        int count = 0;
+        if (countObj != null) {
+            if (countObj instanceof Integer) {
+                count = (Integer) countObj;
+            } else if (countObj instanceof Long) {
+                count = ((Long) countObj).intValue();
+            } else {
+                count = Integer.parseInt(countObj.toString());
+            }
+        }
+
+        if (count >= 3) {
+            throw new TooManyRequestException("Batas maksimum pengiriman kode verifikasi (3 kali) hari ini telah tercapai.");
+        }
+
+        // Generate 6-digit random code
+        String code = String.format("%06d", (int) (Math.random() * 1000000));
+
+        // Store count with 24 hours expiry
+        if (countObj == null) {
+            redisTemplate.opsForValue().set(sendCountKey, 1, java.time.Duration.ofHours(24));
+        } else {
+            redisTemplate.opsForValue().set(sendCountKey, count + 1, java.time.Duration.ofHours(24));
+        }
+
+        // Store code in Redis with 10 mins expiry
+        String codeKey = "register:code:" + email;
+        redisTemplate.opsForValue().set(codeKey, code, java.time.Duration.ofMinutes(10));
+
+        // Publish to rabbitmq
+        String jsonMessage = String.format("{\"to\":\"%s\",\"subject\":\"Email Verification Code - Diskusi Coffee\",\"code\":\"%s\"}", email, code);
+        this.rabbitmqService.sendMessage(
+                "Email Verification Code",
+                "emailQueue.verificationCode",
+                "email.queue",
+                ExchangeType.DIRECT,
+                null,
+                jsonMessage,
+                true,
+                false,
+                false,
+                null
+        );
+
+        ResponseModel<Object> response = new ResponseModel<>(true, "Kode verifikasi telah dikirim ke email Anda.", null);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<Object>> loginGooglePopup(String code) throws Exception {
+        // Exchange auth code for ID Token. For popup flow, redirectUri must be "postmessage".
+        String idTokenString = GoogleTokenUtils.exchangeCodeForTokens(code, CLIENT_ID, CLIENT_SECRET, "postmessage");
+        GoogleIdToken.Payload payload = GoogleTokenUtils.verifyGoogleToken(idTokenString, CLIENT_ID);
+
+        String email = (String) payload.get("email");
+        boolean emailVerified = (boolean) payload.get("email_verified");
+        String aud = (String) payload.get("aud");
+
+        if (!emailVerified) {
+            throw new BadRequestException("Email Google tidak terverifikasi");
+        }
+
+        if (!CLIENT_ID.equals(aud)) {
+            throw new BadRequestException("Audience tidak cocok");
+        }
+
+        AccountModel user = this.accountRepository.findByEmail(email);
+        if (user == null) {
+            // User does not exist, require password setting/registration
+            String name = (String) payload.get("name");
+            String registrationToken = jwtService.createRegistrationToken(email, name);
+
+            HashMap<String, Object> responseData = new HashMap<>();
+            responseData.put("registerRequired", true);
+            responseData.put("registrationToken", registrationToken);
+            responseData.put("email", email);
+            responseData.put("fullName", name);
+
+            ResponseModel<Object> response = new ResponseModel<>(true, "Pendaftaran Google diperlukan", responseData);
+            return ResponseEntity.status(HttpStatus.OK).body(response);
+        }
+
+        // User exists, login directly
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+
+        HashMap<String, Object> responseData = new HashMap<>();
+        responseData.put("registerRequired", false);
+        responseData.put("authData", data);
+
+        ResponseModel<Object> response = new ResponseModel<>(true, "Login berhasil", responseData);
+        return ResponseEntity.status(HttpStatus.OK)
+                .header("Set-Cookie", cookie.toString())
+                .body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<TokenResponseDto>> googleRegister(String registrationToken, String password) throws Exception {
+        Claims claims = jwtService.getClaims(registrationToken);
+        if (!claims.get("type").equals(TokenType.REGISTRATION.name())) {
+            throw new BadRequestException("Token pendaftaran tidak valid");
+        }
+
+        String email = claims.get("email", String.class);
+        String fullName = claims.get("fullName", String.class);
+
+        AccountModel existingUser = this.accountRepository.findByEmail(email);
+        if (existingUser != null) {
+            throw new BadRequestException("Email sudah terdaftar");
+        }
+
+        AccountModel user = new AccountModel();
+        RoleModel role = new RoleModel();
+        role.setRoleId(2); // Customer
+        user.setRole(role);
+        user.setFullName(fullName);
+        user.setEmail(email);
+        user.setPassword(PasswordUtils.hashPassword(password));
+        user.setPhoto(null);
+        user.setCreatedBy(null);
+
+        this.accountRepository.save(user);
+
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Registrasi Google berhasil", data);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("Set-Cookie", cookie.toString())
