@@ -28,7 +28,7 @@ public class AccountModel extends BaseModal {
     @Column(name = "photo", nullable = true)
     private String photo;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "role_id", nullable = false)
     private RoleModel role;
 }
