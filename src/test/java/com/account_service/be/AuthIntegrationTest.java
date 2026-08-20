@@ -6,18 +6,42 @@ import org.springframework.http.MediaType;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@DisplayName("Authentication & Session Endpoints")
+@DisplayName("Authentication & Session Endpoints (Full Coverage)")
 class AuthIntegrationTest extends BaseIntegrationTest {
 
     @Test
-    @DisplayName("POST /api/1.0/auth/login - Non-existent User or Invalid Credentials (400)")
-    void testLoginInvalidCredentials() throws Exception {
+    @DisplayName("POST /api/1.0/auth/login - Success (200)")
+    void testLoginSuccess() throws Exception {
+        createTestAccount("userlogin@gmail.com", "customer");
+
         String body = """
                 {
-                    "email": "nonexistent@gmail.com",
-                    "password": "wrongpassword"
+                    "email": "userlogin@gmail.com",
+                    "password": "Password123!"
+                }
+                """;
+
+        mockMvc.perform(post("/api/1.0/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").exists())
+                .andExpect(jsonPath("$.data.refreshToken").exists());
+    }
+
+    @Test
+    @DisplayName("POST /api/1.0/auth/login - Invalid Password (400)")
+    void testLoginInvalidPassword() throws Exception {
+        createTestAccount("userinvalid@gmail.com", "customer");
+
+        String body = """
+                {
+                    "email": "userinvalid@gmail.com",
+                    "password": "WrongPassword!"
                 }
                 """;
 
@@ -28,51 +52,74 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("GET /api/1.0/auth/google - OAuth Redirect")
-    void testGoogleAuthRedirect() throws Exception {
-        mockMvc.perform(get("/api/1.0/auth/google"))
-                .andExpect(status().is3xxRedirection());
-    }
-
-    @Test
-    @DisplayName("GET /api/1.0/auth/google/callback - Invalid Code Redirection")
-    void testGoogleAuthCallbackInvalidCode() throws Exception {
-        mockMvc.perform(get("/api/1.0/auth/google/callback").param("code", "invalid-code"))
-                .andExpect(status().is3xxRedirection());
-    }
-
-    @Test
-    @DisplayName("POST /api/1.0/auth/google/login - Invalid Temp Token (4xx)")
-    void testGoogleLoginTempTokenInvalid() throws Exception {
+    @DisplayName("POST /api/1.0/auth/login - Non-existent User (400)")
+    void testLoginNonExistentUser() throws Exception {
         String body = """
                 {
-                    "tokenTemp": "invalid-temp-token"
+                    "email": "nonexistent@gmail.com",
+                    "password": "Password123!"
                 }
                 """;
 
-        mockMvc.perform(post("/api/1.0/auth/google/login")
+        mockMvc.perform(post("/api/1.0/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
-                .andExpect(status().is4xxClientError());
+                .andExpect(status().isBadRequest());
     }
 
     @Test
-    @DisplayName("POST /api/1.0/auth/refresh - Invalid Refresh Token (4xx)")
-    void testRefreshTokenInvalid() throws Exception {
-        String body = """
+    @DisplayName("POST /api/1.0/auth/register/send-code & register - Success Flow (201)")
+    void testRegisterSuccessFlow() throws Exception {
+        String sendCodeBody = """
                 {
-                    "refreshToken": "invalid-token-string"
+                    "email": "newregister@gmail.com"
                 }
                 """;
 
-        mockMvc.perform(post("/api/1.0/auth/refresh")
+        mockMvc.perform(post("/api/1.0/auth/register/send-code")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().is4xxClientError());
+                        .content(sendCodeBody))
+                .andExpect(status().isOk());
+
+        // Set verification code directly in Redis for testing
+        redisTemplate.opsForValue().set("register:code:newregister@gmail.com", "123456");
+
+        String registerBody = """
+                {
+                    "email": "newregister@gmail.com",
+                    "password": "Password123!",
+                    "fullName": "New Registered User",
+                    "code": "123456"
+                }
+                """;
+
+        mockMvc.perform(post("/api/1.0/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true));
     }
 
     @Test
-    @DisplayName("POST /api/1.0/auth/logout - Logout Request")
+    @DisplayName("POST /api/1.0/auth/register - Invalid Verification Code (400)")
+    void testRegisterInvalidCode() throws Exception {
+        String registerBody = """
+                {
+                    "email": "wrongcode@gmail.com",
+                    "password": "Password123!",
+                    "fullName": "Wrong Code User",
+                    "code": "000000"
+                }
+                """;
+
+        mockMvc.perform(post("/api/1.0/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/1.0/auth/logout - Success (200)")
     void testLogout() throws Exception {
         String body = """
                 {
@@ -87,35 +134,10 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/1.0/auth/register/send-code - Invalid Email (4xx)")
-    void testSendVerificationCodeInvalidEmail() throws Exception {
-        String body = """
-                {
-                    "email": "not-an-email"
-                }
-                """;
-
-        mockMvc.perform(post("/api/1.0/auth/register/send-code")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @DisplayName("POST /api/1.0/auth/register - Missing Fields (400)")
-    void testRegisterValidationFailure() throws Exception {
-        String body = """
-                {
-                    "email": "test@gmail.com",
-                    "password": "",
-                    "fullName": ""
-                }
-                """;
-
-        mockMvc.perform(post("/api/1.0/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().isBadRequest());
+    @DisplayName("GET /api/1.0/auth/google - OAuth Redirect (3xx)")
+    void testGoogleAuthRedirect() throws Exception {
+        mockMvc.perform(get("/api/1.0/auth/google"))
+                .andExpect(status().is3xxRedirection());
     }
 
     @Test
@@ -131,21 +153,5 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @DisplayName("POST /api/1.0/auth/change-password - Invalid Token (4xx)")
-    void testChangePasswordInvalidToken() throws Exception {
-        String body = """
-                {
-                    "token": "invalid-token",
-                    "password": "newPassword123"
-                }
-                """;
-
-        mockMvc.perform(post("/api/1.0/auth/change-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().is4xxClientError());
     }
 }

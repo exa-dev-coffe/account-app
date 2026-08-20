@@ -1,15 +1,31 @@
 package com.account_service.be;
 
+import com.account_service.be.account.AccountModel;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@DisplayName("User Profile Endpoints")
+@DisplayName("User Profile Endpoints (Full Coverage)")
 class ProfileIntegrationTest extends BaseIntegrationTest {
+
+    @Test
+    @DisplayName("GET /api/1.0/me - Success (200)")
+    void testMeSuccess() throws Exception {
+        AccountModel account = createTestAccount("myprofile@gmail.com", "customer");
+        String token = createTestJwt(account);
+
+        mockMvc.perform(get("/api/1.0/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.email").value("myprofile@gmail.com"));
+    }
 
     @Test
     @DisplayName("GET /api/1.0/me - Unauthorized (401)")
@@ -19,11 +35,33 @@ class ProfileIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("PATCH /api/1.0/update-profile - Success (200)")
+    void testUpdateProfileSuccess() throws Exception {
+        AccountModel account = createTestAccount("updateprofile@gmail.com", "customer");
+        String token = createTestJwt(account);
+
+        String body = """
+                {
+                    "fullName": "Updated User Name",
+                    "photo": "http://example.com/photo.jpg"
+                }
+                """;
+
+        mockMvc.perform(patch("/api/1.0/update-profile")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
     @DisplayName("PATCH /api/1.0/update-profile - Unauthorized (401)")
     void testUpdateProfileUnauthorized() throws Exception {
         String body = """
                 {
-                    "fullName": "Updated Name"
+                    "fullName": "Updated Name",
+                    "photo": "http://example.com/photo.jpg"
                 }
                 """;
 

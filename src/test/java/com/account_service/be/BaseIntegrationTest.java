@@ -1,23 +1,132 @@
 package com.account_service.be;
 
+import com.account_service.be.account.AccountModel;
+import com.account_service.be.account.AccountRepository;
+import com.account_service.be.lib.JwtService;
+import com.account_service.be.lib.RabbitmqService;
+import com.account_service.be.role.RoleModel;
+import com.account_service.be.utils.HmacUtils;
+import com.account_service.be.utils.PasswordUtils;
+import com.account_service.be.utils.enums.TokenType;
+import io.minio.BucketExistsArgs;
+import io.minio.MakeBucketArgs;
+import io.minio.MinioClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
-@Testcontainers
 public abstract class BaseIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    protected static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine");
+    protected static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine");
+    protected static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+            .withExposedPorts(6379);
+    protected static final GenericContainer<?> minio = new GenericContainer<>(DockerImageName.parse("minio/minio:RELEASE.2024-01-16T16-07-38Z"))
+            .withEnv("MINIO_ROOT_USER", "minioadmin")
+            .withEnv("MINIO_ROOT_PASSWORD", "minioadmin")
+            .withCommand("server", "/data")
+            .withExposedPorts(9000);
+
+    static {
+        postgres.start();
+        redis.start();
+        minio.start();
+
+        try {
+            MinioClient client = MinioClient.builder()
+                    .endpoint("http://" + minio.getHost() + ":" + minio.getFirstMappedPort())
+                    .credentials("minioadmin", "minioadmin")
+                    .build();
+            boolean exists = client.bucketExists(BucketExistsArgs.builder().bucket("coffe").build());
+            if (!exists) {
+                client.makeBucket(MakeBucketArgs.builder().bucket("coffe").build());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port", redis::getFirstMappedPort);
+
+        registry.add("minio.endpoint", () -> "http://" + minio.getHost() + ":" + minio.getFirstMappedPort());
+        registry.add("minio.url", () -> "http://" + minio.getHost() + ":" + minio.getFirstMappedPort());
+        registry.add("minio.accessKey", () -> "minioadmin");
+        registry.add("minio.secretKey", () -> "minioadmin");
+        registry.add("minio.bucketName", () -> "coffe");
+    }
 
     @Autowired
     protected MockMvc mockMvc;
+
+    @Autowired
+    protected AccountRepository accountRepository;
+
+    @Autowired
+    protected JwtService jwtService;
+
+    @Autowired
+    protected HmacUtils hmacUtils;
+
+    @Autowired
+    protected RedisTemplate<String, Object> redisTemplate;
+
+    @Autowired
+    protected org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    @MockBean
+    protected RabbitmqService rabbitmqService;
+
+    protected AccountModel createTestAccount(String email, String roleName) {
+        jdbcTemplate.execute("INSERT INTO tm_roles (role_id, role_name) VALUES (1, 'admin'), (2, 'user'), (3, 'barista') ON CONFLICT (role_id) DO NOTHING");
+
+        AccountModel existing = accountRepository.findByEmail(email);
+        if (existing != null) {
+            return existing;
+        }
+
+        RoleModel role = new RoleModel();
+        if ("admin".equalsIgnoreCase(roleName)) {
+            role.setRoleId(1);
+            role.setRoleName("admin");
+        } else if ("barista".equalsIgnoreCase(roleName)) {
+            role.setRoleId(3);
+            role.setRoleName("barista");
+        } else {
+            role.setRoleId(2);
+            role.setRoleName("user");
+        }
+
+        AccountModel account = new AccountModel();
+        account.setEmail(email);
+        account.setPassword(PasswordUtils.hashPassword("Password123!"));
+        account.setFullName("Test " + roleName);
+        account.setPhoto("http://example.com/avatar.jpg");
+        account.setRole(role);
+        return accountRepository.save(account);
+    }
+
+    protected String createTestJwt(AccountModel account) {
+        return jwtService.createToken(account, TokenType.ACCESS);
+    }
+
+    protected String createHmacSignature(String query, String timestamp, String body) throws Exception {
+        String message = (query == null ? "" : query) + timestamp + (body == null ? "" : body);
+        return hmacUtils.generateHMAC(message);
+    }
 }
