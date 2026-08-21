@@ -6,12 +6,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@DisplayName("User Profile Endpoints (Full Coverage)")
+@DisplayName("User Profile Endpoints (Full Coverage + Direct DB Assertions)")
 class ProfileIntegrationTest extends BaseIntegrationTest {
 
     @Test
@@ -24,7 +26,8 @@ class ProfileIntegrationTest extends BaseIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.email").value("myprofile@gmail.com"));
+                .andExpect(jsonPath("$.data.email").value("myprofile@gmail.com"))
+                .andExpect(jsonPath("$.data.fullName").value(account.getFullName()));
     }
 
     @Test
@@ -35,7 +38,7 @@ class ProfileIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("PATCH /api/1.0/update-profile - Success (200)")
+    @DisplayName("PATCH /api/1.0/update-profile - Success (200 + Direct DB Assertion)")
     void testUpdateProfileSuccess() throws Exception {
         AccountModel account = createTestAccount("updateprofile@gmail.com", "customer");
         String token = createTestJwt(account);
@@ -53,6 +56,12 @@ class ProfileIntegrationTest extends BaseIntegrationTest {
                         .content(body))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+
+        // Direct DB Verification
+        AccountModel updatedAccount = accountRepository.findByEmail("updateprofile@gmail.com");
+        assertNotNull(updatedAccount);
+        assertEquals("Updated User Name", updatedAccount.getFullName());
+        assertEquals("http://example.com/photo.jpg", updatedAccount.getPhoto());
     }
 
     @Test

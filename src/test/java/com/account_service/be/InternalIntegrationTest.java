@@ -26,7 +26,12 @@ class InternalIntegrationTest extends BaseIntegrationTest {
                         .header("X-Signature", signature)
                         .header("X-Timestamp", timestamp))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Success Get Names"))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].userId").value(account.getUserId()))
+                .andExpect(jsonPath("$.data[0].fullName").value(account.getFullName()))
+                .andExpect(jsonPath("$.data[0].email").value(account.getEmail()));
     }
 
     @Test

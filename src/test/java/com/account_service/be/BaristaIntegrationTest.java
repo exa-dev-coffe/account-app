@@ -6,13 +6,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@DisplayName("Barista Management Endpoints (Full Coverage)")
+@DisplayName("Barista Management Endpoints (Full Coverage + Direct DB Assertions)")
 class BaristaIntegrationTest extends BaseIntegrationTest {
 
     @Test
@@ -28,7 +30,7 @@ class BaristaIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/1.0/barista/register-barista - Admin Register Barista (201)")
+    @DisplayName("POST /api/1.0/barista/register-barista - Admin Register Barista (201 + Direct DB Assertion)")
     void testRegisterBaristaAdminSuccess() throws Exception {
         AccountModel admin = createTestAccount("adminregister@gmail.com", "admin");
         String token = createTestJwt(admin);
@@ -47,6 +49,12 @@ class BaristaIntegrationTest extends BaseIntegrationTest {
                         .content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true));
+
+        // Direct DB Verification
+        AccountModel baristaAccount = accountRepository.findByEmail("newbarista123@gmail.com");
+        assertNotNull(baristaAccount);
+        assertEquals("New Barista Staff", baristaAccount.getFullName());
+        assertEquals("barista", baristaAccount.getRole().getRoleName());
     }
 
     @Test

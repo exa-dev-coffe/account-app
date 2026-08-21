@@ -1,15 +1,18 @@
 package com.account_service.be;
 
+import com.account_service.be.account.AccountModel;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@DisplayName("Authentication & Session Endpoints (Full Coverage)")
+@DisplayName("Authentication & Session Endpoints (Full Coverage + Direct DB Assertions)")
 class AuthIntegrationTest extends BaseIntegrationTest {
 
     @Test
@@ -68,7 +71,7 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/1.0/auth/register/send-code & register - Success Flow (201)")
+    @DisplayName("POST /api/1.0/auth/register/send-code & register - Success Flow (201 + Direct DB Assertion)")
     void testRegisterSuccessFlow() throws Exception {
         String sendCodeBody = """
                 {
@@ -98,6 +101,12 @@ class AuthIntegrationTest extends BaseIntegrationTest {
                         .content(registerBody))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true));
+
+        // Direct DB Verification
+        AccountModel registeredAccount = accountRepository.findByEmail("newregister@gmail.com");
+        assertNotNull(registeredAccount);
+        assertEquals("New Registered User", registeredAccount.getFullName());
+        assertEquals("user", registeredAccount.getRole().getRoleName());
     }
 
     @Test
