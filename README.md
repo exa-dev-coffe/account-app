@@ -71,7 +71,7 @@ Jalankan perintah berikut untuk menguji seluruh endpoint domain secara modular d
 ./mvnw test
 ```
 
-*Persyaratan:* Docker Desktop/Daemon harus aktif.
+*Requirement:* Docker Desktop/Daemon must be running.
 
 ## 📡 Endpoints Overview
 *   `POST /api/1.0/auth/login` - User login

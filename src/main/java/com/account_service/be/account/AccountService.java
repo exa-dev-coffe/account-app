@@ -73,19 +73,19 @@ public class AccountService {
         AccountModel user = this.accountRepository.findByEmail(email);
 
         if (user == null) {
-            throw new BadRequestException("Password salah atau email tidak terdaftar");
+            throw new BadRequestException("Incorrect password or email not registered");
         }
 
         boolean passwordMatch = PasswordUtils.matches(password, user.getPassword());
 
         if (!passwordMatch) {
-            throw new BadRequestException("Password salah atau email tidak terdaftar");
+            throw new BadRequestException("Incorrect password or email not registered");
         }
 
         TokenResponseDto data = this.createTokenResponse(user);
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
-        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login berhasil", data);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login successful", data);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
@@ -95,14 +95,14 @@ public class AccountService {
     public ResponseEntity<ResponseModel<TokenResponseDto>> loginGoogle(String tokenTemp) throws Exception {
         Object tempTokenObj = redisTemplate.opsForValue().get("exchangeToken:" + tokenTemp);
         if (tempTokenObj == null) {
-            throw new NotAuthorizedException("Token temporary tidak valid atau telah kedaluwarsa");
+            throw new NotAuthorizedException("Temporary token is invalid or has expired");
         }
         TokenResponseDto data = (TokenResponseDto) tempTokenObj;
         redisTemplate.delete("exchangeToken:" + tokenTemp);
 
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), this.accountRepository.findByUserId(jwtService.getClaims(data.getAccessToken()).get("userId", Integer.class)));
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
-        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login berhasil", data);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login successful", data);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
@@ -120,7 +120,7 @@ public class AccountService {
         String aud = (String) payload.get("aud");
 
         if (!emailVerified) {
-            throw new Exception("Email tidak terverifikasi");
+            throw new Exception("Email not verified");
         }
 
         if (!CLIENT_ID.equals(aud)) {
@@ -131,7 +131,7 @@ public class AccountService {
 
             AccountModel user = this.accountRepository.findByEmail(email);
             if (user == null) {
-                throw new Exception("Email tidak ditemukan");
+                throw new Exception("Email not found");
             }
             // generate token for authorize call back temporary 5 minutes to exchange to real token
             String tokenTemporary = jwtService.createToken(user, TokenType.EXCHANGE);
@@ -142,7 +142,7 @@ public class AccountService {
 
             return tokenTemporary;
         } catch (Exception e) {
-            if (e.getMessage().equals("Email tidak ditemukan") || e.getMessage().equals("Invalid audience") || e.getMessage().equals("Email tidak terverifikasi") || e.getMessage().equals("Google login failed. Please try again.")) {
+            if (e.getMessage().equals("Email not found") || e.getMessage().equals("Invalid audience") || e.getMessage().equals("Email not verified") || e.getMessage().equals("Google login failed. Please try again.")) {
                 throw e;
             } else {
                 log.error("Error during Google login callback: {}", e.getMessage());
@@ -156,18 +156,18 @@ public class AccountService {
     public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name, Integer userId, Integer type, String code) {
         AccountModel existingUser = this.accountRepository.findByEmail(email);
         if (existingUser != null) {
-            throw new BadRequestException("Email sudah terdaftar");
+            throw new BadRequestException("Email already registered");
         }
 
         // If type == 2 (Customer registration), we require code verification
         if (type == 2) {
             if (code == null || code.trim().isEmpty()) {
-                throw new BadRequestException("Kode verifikasi wajib diisi");
+                throw new BadRequestException("Verification code is required");
             }
             String codeKey = "register:code:" + email;
             Object savedCode = redisTemplate.opsForValue().get(codeKey);
             if (savedCode == null || !savedCode.toString().equals(code)) {
-                throw new BadRequestException("Kode verifikasi salah atau telah kedaluwarsa");
+                throw new BadRequestException("Verification code is incorrect or has expired");
             }
             redisTemplate.delete(codeKey);
         }
@@ -184,7 +184,7 @@ public class AccountService {
         this.accountRepository.save(user);
         TokenResponseDto data = this.createTokenResponse(user);
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
-        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Registrasi berhasil", data);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Registration successful", data);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("Set-Cookie", cookie.toString())
@@ -195,7 +195,7 @@ public class AccountService {
     public ResponseEntity<ResponseModel<Object>> sendVerificationCode(String email) throws Exception {
         AccountModel existingUser = this.accountRepository.findByEmail(email);
         if (existingUser != null) {
-            throw new BadRequestException("Email sudah terdaftar");
+            throw new BadRequestException("Email already registered");
         }
 
         String sendCountKey = "register:sendCount:" + email;
@@ -212,7 +212,7 @@ public class AccountService {
         }
 
         if (count >= 3) {
-            throw new TooManyRequestException("Batas maksimum pengiriman kode verifikasi (3 kali) hari ini telah tercapai.");
+            throw new TooManyRequestException("Maximum limit of verification code requests (3 times) for today has been reached.");
         }
 
         // Generate 6-digit random code
@@ -244,7 +244,7 @@ public class AccountService {
                 null
         );
 
-        ResponseModel<Object> response = new ResponseModel<>(true, "Kode verifikasi telah dikirim ke email Anda.", null);
+        ResponseModel<Object> response = new ResponseModel<>(true, "Verification code has been sent to your email.", null);
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
@@ -259,11 +259,11 @@ public class AccountService {
         String aud = (String) payload.get("aud");
 
         if (!emailVerified) {
-            throw new BadRequestException("Email Google tidak terverifikasi");
+            throw new BadRequestException("Google email not verified");
         }
 
         if (!CLIENT_ID.equals(aud)) {
-            throw new BadRequestException("Audience tidak cocok");
+            throw new BadRequestException("Audience mismatch");
         }
 
         AccountModel user = this.accountRepository.findByEmail(email);
@@ -278,7 +278,7 @@ public class AccountService {
             responseData.put("email", email);
             responseData.put("fullName", name);
 
-            ResponseModel<Object> response = new ResponseModel<>(true, "Pendaftaran Google diperlukan", responseData);
+            ResponseModel<Object> response = new ResponseModel<>(true, "Google registration required", responseData);
             return ResponseEntity.status(HttpStatus.OK).body(response);
         }
 
@@ -291,7 +291,7 @@ public class AccountService {
         responseData.put("registerRequired", false);
         responseData.put("authData", data);
 
-        ResponseModel<Object> response = new ResponseModel<>(true, "Login berhasil", responseData);
+        ResponseModel<Object> response = new ResponseModel<>(true, "Login successful", responseData);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
@@ -301,7 +301,7 @@ public class AccountService {
     public ResponseEntity<ResponseModel<TokenResponseDto>> googleRegister(String registrationToken, String password) throws Exception {
         Claims claims = jwtService.getClaims(registrationToken);
         if (!claims.get("type").equals(TokenType.REGISTRATION.name())) {
-            throw new BadRequestException("Token pendaftaran tidak valid");
+            throw new BadRequestException("Registration token is invalid");
         }
 
         String email = claims.get("email", String.class);
@@ -309,7 +309,7 @@ public class AccountService {
 
         AccountModel existingUser = this.accountRepository.findByEmail(email);
         if (existingUser != null) {
-            throw new BadRequestException("Email sudah terdaftar");
+            throw new BadRequestException("Email already registered");
         }
 
         AccountModel user = new AccountModel();
@@ -326,7 +326,7 @@ public class AccountService {
 
         TokenResponseDto data = this.createTokenResponse(user);
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
-        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Registrasi Google berhasil", data);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Google registration successful", data);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("Set-Cookie", cookie.toString())
@@ -336,30 +336,30 @@ public class AccountService {
     @Transactional(Transactional.TxType.REQUIRED)
     public ResponseEntity<ResponseModel<TokenResponseDto>> refreshToken(String refreshToken) {
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
-            throw new BadRequestException("Refresh token tidak ditemukan");
+            throw new BadRequestException("Refresh token not found");
         }
 
         Claims claims = jwtService.getClaims(refreshToken);
 
         if (!claims.get("type").equals(TokenType.REFRESH.name())) {
-            throw new BadRequestException("Refresh token tidak valid");
+            throw new BadRequestException("Refresh token is invalid");
         }
 
         boolean isExpired = claims.getExpiration().before(new Date());
 
         if (isExpired) {
-            throw new NotAuthorizedException("Refresh token telah kedaluwarsa");
+            throw new NotAuthorizedException("Refresh token has expired");
         }
 
         AccountModel user = this.accountRepository.findByUserId(Integer.parseInt(claims.get("userId").toString()));
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         AccountCacheDto tokenFromDb = this.getTokenFromDb(refreshToken, user);
         if (tokenFromDb == null) {
-            throw new BadRequestException("Refresh token tidak valid ");
+            throw new BadRequestException("Refresh token is invalid");
         }
 
         boolean isWillBeExpired = claims.getExpiration().before(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 3000)); // 3 days
@@ -369,7 +369,7 @@ public class AccountService {
             TokenResponseDto data = new TokenResponseDto();
             data.setAccessToken(newAccessToken);
             data.setRefreshToken(refreshToken);
-            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token berhasil", data);
+            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token successful", data);
             return ResponseEntity.status(HttpStatus.OK)
                     .body(response);
         } else {
@@ -378,7 +378,7 @@ public class AccountService {
             this.refreshTokenService.deleteRefreshTokenByToken(refreshToken);
             ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
 
-            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token berhasil", data);
+            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token successful", data);
             return ResponseEntity.status(HttpStatus.OK)
                     .header("Set-Cookie", cookie.toString())
                     .body(response);
@@ -388,11 +388,11 @@ public class AccountService {
     @Transactional(Transactional.TxType.REQUIRED)
     public ResponseEntity<ResponseModel<Object>> logout(String refreshToken) {
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
-            throw new BadRequestException("Refresh token tidak ditemukan");
+            throw new BadRequestException("Refresh token not found");
         }
         this.refreshTokenService.deleteRefreshTokenByToken(refreshToken);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", "", 0); // expire the cookie
-        ResponseModel<Object> response = new ResponseModel<>(true, "Logout berhasil", null);
+        ResponseModel<Object> response = new ResponseModel<>(true, "Logout successful", null);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
@@ -400,11 +400,11 @@ public class AccountService {
 
     public ResponseEntity<ResponseModel<MeResponseDto>> me(CurrentUserDto user) {
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
         AccountProjection data = this.accountRepository.findByUserId(user.getUserId(), AccountProjection.class);
         if (data == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
         MeResponseDto me = new MeResponseDto();
         me.setUserId(data.getUserId());
@@ -412,7 +412,7 @@ public class AccountService {
         me.setFullName(data.getFullName());
         me.setPhoto(data.getPhoto());
         me.setRole(data.getRole().getRoleName());
-        ResponseModel<MeResponseDto> response = new ResponseModel<>(true, "Data user ditemukan", me);
+        ResponseModel<MeResponseDto> response = new ResponseModel<>(true, "User data found", me);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -421,11 +421,11 @@ public class AccountService {
         AccountModel user = this.accountRepository.findByEmail(email);
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         if (this.resetTokenPasswordService.checkWasLimitOneDay(user)) {
-            throw new TooManyRequestException("Anda telah mencapai batas maksimal permintaan reset password hari ini. Silakan coba lagi besok.");
+            throw new TooManyRequestException("You have reached the maximum daily limit for password reset requests. Please try again tomorrow.");
         }
 
         String resetToken = jwtService.createToken(user, TokenType.RESET_PASSWORD);
@@ -451,7 +451,7 @@ public class AccountService {
         );
 
 
-        ResponseModel<String> response = new ResponseModel<>(true, "Link reset password telah dikirim ke email Anda jika email terdaftar.", null);
+        ResponseModel<String> response = new ResponseModel<>(true, "Password reset link has been sent to your email if registered.", null);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -467,13 +467,13 @@ public class AccountService {
         }
 
         if (!claims.get("type").equals(TokenType.RESET_PASSWORD.name())) {
-            throw new BadRequestException("Token tidak valid");
+            throw new BadRequestException("Token is invalid");
         }
 
         AccountModel user = this.accountRepository.findByUserId(Integer.parseInt(claims.get("userId").toString()));
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         user.setPassword(PasswordUtils.hashPassword(newPassword));
@@ -483,7 +483,7 @@ public class AccountService {
 
         HashMap<String, Object> emailPayload = new HashMap<>();
         emailPayload.put("to", user.getEmail());
-        emailPayload.put("subject", "Reset Password Berhasil");
+        emailPayload.put("subject", "Reset Password Successful");
         ObjectMapper mapper = new ObjectMapper();
         String jsonMessage = mapper.writeValueAsString(emailPayload);
 
@@ -501,7 +501,7 @@ public class AccountService {
         );
 
 
-        ResponseModel<String> response = new ResponseModel<>(true, "Password berhasil diubah", null);
+        ResponseModel<String> response = new ResponseModel<>(true, "Password changed successfully", null);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -539,7 +539,7 @@ public class AccountService {
         responsePagination.setPageSize(responseData.getSize());
         responsePagination.setLastPage(responseData.isLast());
 
-        ResponseModel<PaginationResponseDto<BaristaResponseDto>> response = new ResponseModel<>(true, "Data barista ditemukan", responsePagination);
+        ResponseModel<PaginationResponseDto<BaristaResponseDto>> response = new ResponseModel<>(true, "Barista data found", responsePagination);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -549,17 +549,17 @@ public class AccountService {
         AccountModel user = this.accountRepository.findById(baristaId).orElse(null);
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         if (user.getRole().getRoleId() != 3) {
-            throw new BadRequestException("User bukan barista");
+            throw new BadRequestException("User is not a barista");
         }
 
         this.refreshTokenService.deleteRefreshTokenByUser(user);
         this.accountRepository.delete(user);
 
-        ResponseModel<String> response = new ResponseModel<>(true, "Barista berhasil dihapus", null);
+        ResponseModel<String> response = new ResponseModel<>(true, "Barista deleted successfully", null);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -569,7 +569,7 @@ public class AccountService {
         AccountModel user = this.accountRepository.findById(userId).orElse(null);
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         user.setFullName(fullName);
@@ -583,7 +583,7 @@ public class AccountService {
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
 
-        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "User berhasil diupdate", data);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "User updated successfully", data);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
