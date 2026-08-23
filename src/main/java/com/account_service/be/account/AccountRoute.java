@@ -1,8 +1,10 @@
 package com.account_service.be.account;
 
 import com.account_service.be.account.dto.*;
+import com.account_service.be.annotation.ActionType;
 import com.account_service.be.annotation.CurrentUser;
 import com.account_service.be.annotation.RequireAuth;
+import com.account_service.be.annotation.RequirePermission;
 import com.account_service.be.annotation.RequireRole;
 import com.account_service.be.utils.commons.CurrentUserDto;
 import com.account_service.be.utils.commons.PaginationResponseDto;
@@ -144,7 +146,7 @@ public class AccountRoute {
     }
 
     @PostMapping("/barista/register-barista")
-    @RequireRole({"admin"})
+    @RequirePermission(feature = "barista", action = ActionType.CREATE)
     public ResponseEntity<ResponseModel<TokenResponseDto>> registerBarista(@CurrentUser CurrentUserDto currentUser, @Valid @RequestBody RegisterRequestDto registerRequest) {
         return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), currentUser.getUserId(), 3, null);
     }
@@ -156,7 +158,7 @@ public class AccountRoute {
     }
 
     @GetMapping("/barista/list-barista")
-    @RequireRole({"admin"})
+    @RequirePermission(feature = "barista", action = ActionType.VIEW)
     public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, @Param("searchValue") String searchValue, @Param("searchKey") String searchKey) {
         // Kurangi 1, pastikan tidak negatif
         int pageNumber = pageable.getPageNumber() > 0 ? pageable.getPageNumber() - 1 : 0;
@@ -167,7 +169,7 @@ public class AccountRoute {
     }
 
     @DeleteMapping("/barista")
-    @RequireRole({"admin"})
+    @RequirePermission(feature = "barista", action = ActionType.DELETE)
     public ResponseEntity<ResponseModel<String>> deleteBarista(@RequestParam(name = "userId", required = false) Integer userId) {
         if (userId == null) {
             return ResponseEntity.badRequest().body(new ResponseModel<>(false, "UserId is required", null));

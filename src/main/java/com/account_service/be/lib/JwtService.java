@@ -2,9 +2,13 @@ package com.account_service.be.lib;
 
 import com.account_service.be.account.AccountModel;
 import com.account_service.be.exception.NotAuthorizedException;
+import com.account_service.be.roleFeature.PermissionCacheService;
+import com.account_service.be.roleFeature.dto.PermissionActionDto;
 import com.account_service.be.utils.enums.TokenType;
 import io.jsonwebtoken.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -20,6 +24,13 @@ public class JwtService {
     @Value("${app.jwt.secret}")
     private String SECRET_KEY;
 
+    private final PermissionCacheService permissionCacheService;
+
+    @Autowired
+    public JwtService(@Lazy PermissionCacheService permissionCacheService) {
+        this.permissionCacheService = permissionCacheService;
+    }
+
     private SecretKey getSigningKey() {
         return new SecretKeySpec(
                 SECRET_KEY.getBytes(StandardCharsets.UTF_8),
@@ -33,8 +44,11 @@ public class JwtService {
         claims.put("email", user.getEmail());
         claims.put("userId", user.getUserId());
         claims.put("type", type.name());
-        claims.put("role", user.getRole().getRoleName());
-        claims.put("photo", user.getPhoto());
+        if (user.getRole() != null) {
+            claims.put("role", user.getRole().getRoleName());
+            claims.put("roleId", user.getRole().getRoleId());
+        }
+
         return claims;
     }
 
@@ -83,7 +97,6 @@ public class JwtService {
     // Ambil claims dari token
     public Claims getClaims(String token) {
         try {
-
             return Jwts.parserBuilder()
                     .setSigningKey(getSigningKey())
                     .build()

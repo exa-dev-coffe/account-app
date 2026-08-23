@@ -55,8 +55,9 @@ public class AccountService {
     private final String frontendUrl;
     private final ResetTokenPasswordService resetTokenPasswordService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final com.account_service.be.roleFeature.PermissionCacheService permissionCacheService;
 
-    public AccountService(AccountRepository accountRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService, RedisTemplate<String, Object> redisTemplate, @Value("${spring.security.oauth2.authorizationserver.client.google.client-secret}") String clientSecret) {
+    public AccountService(AccountRepository accountRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService, RedisTemplate<String, Object> redisTemplate, @Value("${spring.security.oauth2.authorizationserver.client.google.client-secret}") String clientSecret, com.account_service.be.roleFeature.PermissionCacheService permissionCacheService) {
         this.accountRepository = accountRepository;
         this.resetTokenPasswordService = resetTokenPasswordService;
         this.rabbitmqService = rabbitmqService;
@@ -66,6 +67,7 @@ public class AccountService {
         this.CLIENT_ID = clientId;
         this.frontendUrl = frontendUrl;
         this.redisTemplate = redisTemplate;
+        this.permissionCacheService = permissionCacheService;
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
@@ -412,6 +414,8 @@ public class AccountService {
         me.setFullName(data.getFullName());
         me.setPhoto(data.getPhoto());
         me.setRole(data.getRole().getRoleName());
+        me.setRoleId(data.getRole().getRoleId());
+        me.setPermissions(this.permissionCacheService.getRolePermissions(data.getRole().getRoleId()));
         ResponseModel<MeResponseDto> response = new ResponseModel<>(true, "User data found", me);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
