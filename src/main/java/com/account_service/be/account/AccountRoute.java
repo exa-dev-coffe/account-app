@@ -210,5 +210,65 @@ public class AccountRoute {
         return accountService.updateUser(refreshToken, currentUser.getUserId(), updateProfileRequest.getFullName(), updateProfileRequest.getPhoto());
     }
 
+    // ==========================================
+    // USER MANAGEMENT ENDPOINTS (PBAC PROTECTED)
+    // ==========================================
 
+    @GetMapping("/admin/users")
+    @RequirePermission(feature = "user_management", action = ActionType.VIEW)
+    public ResponseEntity<ResponseModel<PaginationResponseDto<UserResponseDto>>> listUsers(
+            Pageable pageable,
+            @RequestParam(name = "roleId", required = false) Integer roleId,
+            @RequestParam(name = "searchValue", required = false) String searchValue,
+            @RequestParam(name = "searchKey", required = false) String searchKey
+    ) {
+        int pageNumber = pageable.getPageNumber() > 0 ? pageable.getPageNumber() - 1 : 0;
+        Pageable adjustedPageable = PageRequest.of(pageNumber, pageable.getPageSize(), pageable.getSort());
+        return accountService.listUsers(adjustedPageable, roleId, searchValue, searchKey);
+    }
+
+    @GetMapping("/admin/users/{userId}")
+    @RequirePermission(feature = "user_management", action = ActionType.VIEW)
+    public ResponseEntity<ResponseModel<UserResponseDto>> getUserDetail(@PathVariable("userId") Integer userId) {
+        return accountService.getUserById(userId);
+    }
+
+    @PostMapping("/admin/users")
+    @RequirePermission(feature = "user_management", action = ActionType.CREATE)
+    public ResponseEntity<ResponseModel<UserResponseDto>> createUser(
+            @CurrentUser CurrentUserDto currentUser,
+            @Valid @RequestBody CreateUserAdminRequestDto request
+    ) {
+        return accountService.createUserByAdmin(request, currentUser);
+    }
+
+    @PutMapping("/admin/users/{userId}")
+    @RequirePermission(feature = "user_management", action = ActionType.EDIT)
+    public ResponseEntity<ResponseModel<UserResponseDto>> updateUser(
+            @PathVariable("userId") Integer userId,
+            @CurrentUser CurrentUserDto currentUser,
+            @Valid @RequestBody UpdateUserAdminRequestDto request
+    ) {
+        return accountService.updateUserByAdmin(userId, request, currentUser);
+    }
+
+    @PutMapping("/admin/users/{userId}/password")
+    @RequirePermission(feature = "user_management", action = ActionType.EDIT)
+    public ResponseEntity<ResponseModel<String>> resetUserPassword(
+            @PathVariable("userId") Integer userId,
+            @CurrentUser CurrentUserDto currentUser,
+            @Valid @RequestBody AdminResetPasswordRequestDto request
+    ) {
+        return accountService.resetPasswordByAdmin(userId, request.getNewPassword(), currentUser);
+    }
+
+    @DeleteMapping("/admin/users/{userId}")
+    @RequirePermission(feature = "user_management", action = ActionType.DELETE)
+    public ResponseEntity<ResponseModel<String>> deleteUser(
+            @PathVariable("userId") Integer userId,
+            @CurrentUser CurrentUserDto currentUser
+    ) {
+        return accountService.deleteUserByAdmin(userId, currentUser);
+    }
 }
+

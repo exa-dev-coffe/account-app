@@ -1,9 +1,6 @@
 package com.account_service.be.account;
 
-import com.account_service.be.account.dto.BaristaResponseDto;
-import com.account_service.be.account.dto.MeResponseDto;
-import com.account_service.be.account.dto.NamesResponseDto;
-import com.account_service.be.account.dto.TokenResponseDto;
+import com.account_service.be.account.dto.*;
 import com.account_service.be.account.projection.AccountProjection;
 import com.account_service.be.exception.BadRequestException;
 import com.account_service.be.exception.NotAuthorizedException;
@@ -14,6 +11,7 @@ import com.account_service.be.lib.RabbitmqService;
 import com.account_service.be.refreshToken.RefreshTokenService;
 import com.account_service.be.refreshToken.dto.AccountCacheDto;
 import com.account_service.be.role.RoleModel;
+import com.account_service.be.role.RoleRepository;
 import com.account_service.be.tokenResetPassword.ResetTokenPasswordService;
 import com.account_service.be.utils.GoogleTokenUtils;
 import com.account_service.be.utils.PasswordUtils;
@@ -47,6 +45,7 @@ import java.util.List;
 @Service
 public class AccountService {
     private final AccountRepository accountRepository;
+    private final RoleRepository roleRepository;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final String CLIENT_ID;
@@ -57,8 +56,9 @@ public class AccountService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final com.account_service.be.roleFeature.PermissionCacheService permissionCacheService;
 
-    public AccountService(AccountRepository accountRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService, RedisTemplate<String, Object> redisTemplate, @Value("${spring.security.oauth2.authorizationserver.client.google.client-secret}") String clientSecret, com.account_service.be.roleFeature.PermissionCacheService permissionCacheService) {
+    public AccountService(AccountRepository accountRepository, RoleRepository roleRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService, RedisTemplate<String, Object> redisTemplate, @Value("${spring.security.oauth2.authorizationserver.client.google.client-secret}") String clientSecret, com.account_service.be.roleFeature.PermissionCacheService permissionCacheService) {
         this.accountRepository = accountRepository;
+        this.roleRepository = roleRepository;
         this.resetTokenPasswordService = resetTokenPasswordService;
         this.rabbitmqService = rabbitmqService;
         this.CLIENT_SECRET = clientSecret;
@@ -595,6 +595,154 @@ public class AccountService {
 
     public List<NamesResponseDto> getNamesByUserIds(Integer[] userIds) {
         return this.accountRepository.findByUserIdIn(userIds);
+    }
+
+    public ResponseEntity<ResponseModel<PaginationResponseDto<UserResponseDto>>> listUsers(Pageable pageable, Integer roleId, String searchValue, String searchKey) {
+        Specification<AccountModel> spec = (root, query, cb) -> {
+            Predicate predicate = cb.conjunction();
+            if (roleId != null && roleId > 0) {
+                predicate = cb.and(predicate, cb.equal(root.get("role").get("roleId"), roleId));
+            }
+            if (searchValue != null && !searchValue.trim().isEmpty()) {
+                String term = "%" + searchValue.trim().toLowerCase() + "%";
+                if (searchKey != null && !searchKey.trim().isEmpty()) {
+                    predicate = cb.and(predicate, cb.like(cb.lower(root.get(searchKey)), term));
+                } else {
+                    Predicate nameMatch = cb.like(cb.lower(root.get("fullName")), term);
+                    Predicate emailMatch = cb.like(cb.lower(root.get("email")), term);
+                    predicate = cb.and(predicate, cb.or(nameMatch, emailMatch));
+                }
+            }
+            return predicate;
+        };
+
+        Page<AccountModel> pageData = accountRepository.findAll(spec, pageable);
+        Page<UserResponseDto> responseData = pageData.map(this::mapToUserResponseDto);
+
+        PaginationResponseDto<UserResponseDto> responsePagination = new PaginationResponseDto<>();
+        responsePagination.setData(responseData.getContent());
+        responsePagination.setTotalData(responseData.getTotalElements());
+        responsePagination.setTotalPages(responseData.getTotalPages());
+        responsePagination.setCurrentPage(responseData.getNumber() + 1);
+        responsePagination.setPageSize(responseData.getSize());
+        responsePagination.setLastPage(responseData.isLast());
+
+        ResponseModel<PaginationResponseDto<UserResponseDto>> response = new ResponseModel<>(true, "Users retrieved successfully", responsePagination);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    public ResponseEntity<ResponseModel<UserResponseDto>> getUserById(Integer userId) {
+        AccountModel user = accountRepository.findById(userId).orElse(null);
+        if (user == null) {
+            throw new NotFoundException("User not found with id: " + userId);
+        }
+        return ResponseEntity.ok(new ResponseModel<>(true, "User details retrieved successfully", mapToUserResponseDto(user)));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<UserResponseDto>> createUserByAdmin(CreateUserAdminRequestDto request, CurrentUserDto currentUser) {
+        AccountModel existingUser = accountRepository.findByEmail(request.getEmail().trim().toLowerCase());
+        if (existingUser != null) {
+            throw new BadRequestException("Email already registered");
+        }
+
+        RoleModel role = roleRepository.findById(request.getRoleId())
+                .orElseThrow(() -> new BadRequestException("Invalid role ID: " + request.getRoleId()));
+
+        AccountModel user = new AccountModel();
+        user.setFullName(request.getFullName().trim());
+        user.setEmail(request.getEmail().trim().toLowerCase());
+        user.setPassword(PasswordUtils.hashPassword(request.getPassword()));
+        user.setRole(role);
+        user.setCreatedBy(currentUser != null ? currentUser.getUserId() : null);
+        user.setUpdatedBy(currentUser != null ? currentUser.getUserId() : null);
+        user.setCreatedAt(new Date());
+        user.setUpdatedAt(new Date());
+
+        accountRepository.save(user);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new ResponseModel<>(true, "User created successfully", mapToUserResponseDto(user)));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<UserResponseDto>> updateUserByAdmin(Integer userId, UpdateUserAdminRequestDto request, CurrentUserDto currentUser) {
+        AccountModel user = accountRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found with id: " + userId));
+
+        // Security rule 1: User cannot modify their own role
+        if (currentUser != null && currentUser.getUserId().equals(userId)) {
+            if (user.getRole() != null && user.getRole().getRoleId() != request.getRoleId()) {
+                throw new BadRequestException("You cannot modify your own role");
+            }
+        }
+
+        // Security rule 2: Super Admin role (userId = 1) cannot be changed
+        if (userId.equals(1) && request.getRoleId() != 1) {
+            throw new BadRequestException("Super Admin role cannot be changed");
+        }
+
+        RoleModel role = roleRepository.findById(request.getRoleId())
+                .orElseThrow(() -> new BadRequestException("Invalid role ID: " + request.getRoleId()));
+
+        user.setFullName(request.getFullName().trim());
+        user.setRole(role);
+        if (request.getPhoto() != null) {
+            user.setPhoto(request.getPhoto());
+        }
+        user.setUpdatedBy(currentUser != null ? currentUser.getUserId() : null);
+        user.setUpdatedAt(new Date());
+
+        accountRepository.save(user);
+
+        return ResponseEntity.ok(new ResponseModel<>(true, "User updated successfully", mapToUserResponseDto(user)));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> resetPasswordByAdmin(Integer userId, String newPassword, CurrentUserDto currentUser) {
+        AccountModel user = accountRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found with id: " + userId));
+
+        user.setPassword(PasswordUtils.hashPassword(newPassword));
+        user.setUpdatedBy(currentUser != null ? currentUser.getUserId() : null);
+        user.setUpdatedAt(new Date());
+        accountRepository.save(user);
+
+        // Invalidate active refresh tokens for the user
+        refreshTokenService.deleteRefreshTokenByUser(user);
+
+        return ResponseEntity.ok(new ResponseModel<>(true, "Password updated successfully for " + user.getEmail(), null));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> deleteUserByAdmin(Integer userId, CurrentUserDto currentUser) {
+        if (userId.equals(1)) {
+            throw new BadRequestException("Super Admin account cannot be deleted");
+        }
+        if (currentUser != null && currentUser.getUserId().equals(userId)) {
+            throw new BadRequestException("You cannot delete your own account");
+        }
+
+        AccountModel user = accountRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found with id: " + userId));
+
+        refreshTokenService.deleteRefreshTokenByUser(user);
+        accountRepository.delete(user);
+
+        return ResponseEntity.ok(new ResponseModel<>(true, "User deleted successfully", null));
+    }
+
+    private UserResponseDto mapToUserResponseDto(AccountModel user) {
+        return UserResponseDto.builder()
+                .userId(user.getUserId())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .photo(user.getPhoto())
+                .roleId(user.getRole() != null ? user.getRole().getRoleId() : 0)
+                .roleName(user.getRole() != null ? user.getRole().getRoleName() : "")
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
     }
 
     private TokenResponseDto createTokenResponse(AccountModel user) {

@@ -1,6 +1,6 @@
 -- liquibase formatted sql
 
--- changeset developer:2
+-- changeset developer:2 validCheckSum:ANY
 -- preconditions onFail:MARK_RAN
 -- precondition-sql-check expectedResult:0 SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'tm_features';
 
