@@ -36,7 +36,7 @@ class RolePermissionIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data").isArray())
-                .andExpect(jsonPath("$.data.length()").value(11));
+                .andExpect(jsonPath("$.data.length()").value(12));
     }
 
     @Test
