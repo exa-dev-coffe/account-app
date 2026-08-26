@@ -1,8 +1,10 @@
 package com.account_service.be.account;
 
 import com.account_service.be.account.dto.*;
+import com.account_service.be.annotation.ActionType;
 import com.account_service.be.annotation.CurrentUser;
 import com.account_service.be.annotation.RequireAuth;
+import com.account_service.be.annotation.RequirePermission;
 import com.account_service.be.annotation.RequireRole;
 import com.account_service.be.utils.commons.CurrentUserDto;
 import com.account_service.be.utils.commons.PaginationResponseDto;
@@ -125,13 +127,28 @@ public class AccountRoute {
 
     @PostMapping("/auth/register")
     public ResponseEntity<ResponseModel<TokenResponseDto>> register(@Valid @RequestBody RegisterRequestDto registerRequest) {
-        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), null, 2);
+        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), null, 2, registerRequest.getCode());
+    }
+
+    @PostMapping("/auth/register/send-code")
+    public ResponseEntity<ResponseModel<Object>> sendVerificationCode(@Valid @RequestBody SendCodeRequestDto sendCodeRequest) throws Exception {
+        return accountService.sendVerificationCode(sendCodeRequest.getEmail());
+    }
+
+    @PostMapping("/auth/google")
+    public ResponseEntity<ResponseModel<Object>> loginGooglePopup(@Valid @RequestBody GoogleCodeRequestDto request) throws Exception {
+        return accountService.loginGooglePopup(request.getCode());
+    }
+
+    @PostMapping("/auth/google/register")
+    public ResponseEntity<ResponseModel<TokenResponseDto>> googleRegister(@Valid @RequestBody GoogleRegisterRequestDto request) throws Exception {
+        return accountService.googleRegister(request.getRegistrationToken(), request.getPassword());
     }
 
     @PostMapping("/barista/register-barista")
-    @RequireRole({"admin"})
+    @RequirePermission(feature = "barista", action = ActionType.CREATE)
     public ResponseEntity<ResponseModel<TokenResponseDto>> registerBarista(@CurrentUser CurrentUserDto currentUser, @Valid @RequestBody RegisterRequestDto registerRequest) {
-        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), currentUser.getUserId(), 3);
+        return accountService.register(registerRequest.getEmail(), registerRequest.getPassword(), registerRequest.getFullName(), currentUser.getUserId(), 3, null);
     }
 
     @GetMapping("/me")
@@ -141,7 +158,7 @@ public class AccountRoute {
     }
 
     @GetMapping("/barista/list-barista")
-    @RequireRole({"admin"})
+    @RequirePermission(feature = "barista", action = ActionType.VIEW)
     public ResponseEntity<ResponseModel<PaginationResponseDto<BaristaResponseDto>>> listBarista(Pageable pageable, @Param("searchValue") String searchValue, @Param("searchKey") String searchKey) {
         // Kurangi 1, pastikan tidak negatif
         int pageNumber = pageable.getPageNumber() > 0 ? pageable.getPageNumber() - 1 : 0;
@@ -152,7 +169,7 @@ public class AccountRoute {
     }
 
     @DeleteMapping("/barista")
-    @RequireRole({"admin"})
+    @RequirePermission(feature = "barista", action = ActionType.DELETE)
     public ResponseEntity<ResponseModel<String>> deleteBarista(@RequestParam(name = "userId", required = false) Integer userId) {
         if (userId == null) {
             return ResponseEntity.badRequest().body(new ResponseModel<>(false, "UserId is required", null));
@@ -193,5 +210,65 @@ public class AccountRoute {
         return accountService.updateUser(refreshToken, currentUser.getUserId(), updateProfileRequest.getFullName(), updateProfileRequest.getPhoto());
     }
 
+    // ==========================================
+    // USER MANAGEMENT ENDPOINTS (PBAC PROTECTED)
+    // ==========================================
 
+    @GetMapping("/admin/users")
+    @RequirePermission(feature = "user_management", action = ActionType.VIEW)
+    public ResponseEntity<ResponseModel<PaginationResponseDto<UserResponseDto>>> listUsers(
+            Pageable pageable,
+            @RequestParam(name = "roleId", required = false) Integer roleId,
+            @RequestParam(name = "searchValue", required = false) String searchValue,
+            @RequestParam(name = "searchKey", required = false) String searchKey
+    ) {
+        int pageNumber = pageable.getPageNumber() > 0 ? pageable.getPageNumber() - 1 : 0;
+        Pageable adjustedPageable = PageRequest.of(pageNumber, pageable.getPageSize(), pageable.getSort());
+        return accountService.listUsers(adjustedPageable, roleId, searchValue, searchKey);
+    }
+
+    @GetMapping("/admin/users/{userId}")
+    @RequirePermission(feature = "user_management", action = ActionType.VIEW)
+    public ResponseEntity<ResponseModel<UserResponseDto>> getUserDetail(@PathVariable("userId") Integer userId) {
+        return accountService.getUserById(userId);
+    }
+
+    @PostMapping("/admin/users")
+    @RequirePermission(feature = "user_management", action = ActionType.CREATE)
+    public ResponseEntity<ResponseModel<UserResponseDto>> createUser(
+            @CurrentUser CurrentUserDto currentUser,
+            @Valid @RequestBody CreateUserAdminRequestDto request
+    ) {
+        return accountService.createUserByAdmin(request, currentUser);
+    }
+
+    @PutMapping("/admin/users/{userId}")
+    @RequirePermission(feature = "user_management", action = ActionType.EDIT)
+    public ResponseEntity<ResponseModel<UserResponseDto>> updateUser(
+            @PathVariable("userId") Integer userId,
+            @CurrentUser CurrentUserDto currentUser,
+            @Valid @RequestBody UpdateUserAdminRequestDto request
+    ) {
+        return accountService.updateUserByAdmin(userId, request, currentUser);
+    }
+
+    @PutMapping("/admin/users/{userId}/password")
+    @RequirePermission(feature = "user_management", action = ActionType.EDIT)
+    public ResponseEntity<ResponseModel<String>> resetUserPassword(
+            @PathVariable("userId") Integer userId,
+            @CurrentUser CurrentUserDto currentUser,
+            @Valid @RequestBody AdminResetPasswordRequestDto request
+    ) {
+        return accountService.resetPasswordByAdmin(userId, request.getNewPassword(), currentUser);
+    }
+
+    @DeleteMapping("/admin/users/{userId}")
+    @RequirePermission(feature = "user_management", action = ActionType.DELETE)
+    public ResponseEntity<ResponseModel<String>> deleteUser(
+            @PathVariable("userId") Integer userId,
+            @CurrentUser CurrentUserDto currentUser
+    ) {
+        return accountService.deleteUserByAdmin(userId, currentUser);
+    }
 }
+

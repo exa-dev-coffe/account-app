@@ -1,9 +1,6 @@
 package com.account_service.be.account;
 
-import com.account_service.be.account.dto.BaristaResponseDto;
-import com.account_service.be.account.dto.MeResponseDto;
-import com.account_service.be.account.dto.NamesResponseDto;
-import com.account_service.be.account.dto.TokenResponseDto;
+import com.account_service.be.account.dto.*;
 import com.account_service.be.account.projection.AccountProjection;
 import com.account_service.be.exception.BadRequestException;
 import com.account_service.be.exception.NotAuthorizedException;
@@ -14,6 +11,7 @@ import com.account_service.be.lib.RabbitmqService;
 import com.account_service.be.refreshToken.RefreshTokenService;
 import com.account_service.be.refreshToken.dto.AccountCacheDto;
 import com.account_service.be.role.RoleModel;
+import com.account_service.be.role.RoleRepository;
 import com.account_service.be.tokenResetPassword.ResetTokenPasswordService;
 import com.account_service.be.utils.GoogleTokenUtils;
 import com.account_service.be.utils.PasswordUtils;
@@ -47,6 +45,7 @@ import java.util.List;
 @Service
 public class AccountService {
     private final AccountRepository accountRepository;
+    private final RoleRepository roleRepository;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final String CLIENT_ID;
@@ -55,9 +54,11 @@ public class AccountService {
     private final String frontendUrl;
     private final ResetTokenPasswordService resetTokenPasswordService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final com.account_service.be.roleFeature.PermissionCacheService permissionCacheService;
 
-    public AccountService(AccountRepository accountRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService, RedisTemplate<String, Object> redisTemplate, @Value("${spring.security.oauth2.authorizationserver.client.google.client-secret}") String clientSecret) {
+    public AccountService(AccountRepository accountRepository, RoleRepository roleRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService, RedisTemplate<String, Object> redisTemplate, @Value("${spring.security.oauth2.authorizationserver.client.google.client-secret}") String clientSecret, com.account_service.be.roleFeature.PermissionCacheService permissionCacheService) {
         this.accountRepository = accountRepository;
+        this.roleRepository = roleRepository;
         this.resetTokenPasswordService = resetTokenPasswordService;
         this.rabbitmqService = rabbitmqService;
         this.CLIENT_SECRET = clientSecret;
@@ -66,6 +67,7 @@ public class AccountService {
         this.CLIENT_ID = clientId;
         this.frontendUrl = frontendUrl;
         this.redisTemplate = redisTemplate;
+        this.permissionCacheService = permissionCacheService;
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
@@ -73,19 +75,19 @@ public class AccountService {
         AccountModel user = this.accountRepository.findByEmail(email);
 
         if (user == null) {
-            throw new BadRequestException("Password salah atau email tidak terdaftar");
+            throw new BadRequestException("Incorrect password or email not registered");
         }
 
         boolean passwordMatch = PasswordUtils.matches(password, user.getPassword());
 
         if (!passwordMatch) {
-            throw new BadRequestException("Password salah atau email tidak terdaftar");
+            throw new BadRequestException("Incorrect password or email not registered");
         }
 
         TokenResponseDto data = this.createTokenResponse(user);
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
-        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login berhasil", data);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login successful", data);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
@@ -95,14 +97,14 @@ public class AccountService {
     public ResponseEntity<ResponseModel<TokenResponseDto>> loginGoogle(String tokenTemp) throws Exception {
         Object tempTokenObj = redisTemplate.opsForValue().get("exchangeToken:" + tokenTemp);
         if (tempTokenObj == null) {
-            throw new NotAuthorizedException("Token temporary tidak valid atau telah kedaluwarsa");
+            throw new NotAuthorizedException("Temporary token is invalid or has expired");
         }
         TokenResponseDto data = (TokenResponseDto) tempTokenObj;
         redisTemplate.delete("exchangeToken:" + tokenTemp);
 
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), this.accountRepository.findByUserId(jwtService.getClaims(data.getAccessToken()).get("userId", Integer.class)));
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
-        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login berhasil", data);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Login successful", data);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
@@ -120,7 +122,7 @@ public class AccountService {
         String aud = (String) payload.get("aud");
 
         if (!emailVerified) {
-            throw new Exception("Email tidak terverifikasi");
+            throw new Exception("Email not verified");
         }
 
         if (!CLIENT_ID.equals(aud)) {
@@ -131,7 +133,7 @@ public class AccountService {
 
             AccountModel user = this.accountRepository.findByEmail(email);
             if (user == null) {
-                throw new Exception("Email tidak ditemukan");
+                throw new Exception("Email not found");
             }
             // generate token for authorize call back temporary 5 minutes to exchange to real token
             String tokenTemporary = jwtService.createToken(user, TokenType.EXCHANGE);
@@ -142,7 +144,7 @@ public class AccountService {
 
             return tokenTemporary;
         } catch (Exception e) {
-            if (e.getMessage().equals("Email tidak ditemukan") || e.getMessage().equals("Invalid audience") || e.getMessage().equals("Email tidak terverifikasi") || e.getMessage().equals("Google login failed. Please try again.")) {
+            if (e.getMessage().equals("Email not found") || e.getMessage().equals("Invalid audience") || e.getMessage().equals("Email not verified") || e.getMessage().equals("Google login failed. Please try again.")) {
                 throw e;
             } else {
                 log.error("Error during Google login callback: {}", e.getMessage());
@@ -153,7 +155,25 @@ public class AccountService {
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
-    public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name, Integer userId, Integer type) {
+    public ResponseEntity<ResponseModel<TokenResponseDto>> register(String email, String password, String name, Integer userId, Integer type, String code) {
+        AccountModel existingUser = this.accountRepository.findByEmail(email);
+        if (existingUser != null) {
+            throw new BadRequestException("Email already registered");
+        }
+
+        // If type == 2 (Customer registration), we require code verification
+        if (type == 2) {
+            if (code == null || code.trim().isEmpty()) {
+                throw new BadRequestException("Verification code is required");
+            }
+            String codeKey = "register:code:" + email;
+            Object savedCode = redisTemplate.opsForValue().get(codeKey);
+            if (savedCode == null || !savedCode.toString().equals(code)) {
+                throw new BadRequestException("Verification code is incorrect or has expired");
+            }
+            redisTemplate.delete(codeKey);
+        }
+
         AccountModel user = new AccountModel();
         RoleModel role = new RoleModel();
         role.setRoleId(type);
@@ -166,7 +186,149 @@ public class AccountService {
         this.accountRepository.save(user);
         TokenResponseDto data = this.createTokenResponse(user);
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
-        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Registrasi berhasil", data);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Registration successful", data);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .header("Set-Cookie", cookie.toString())
+                .body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<Object>> sendVerificationCode(String email) throws Exception {
+        AccountModel existingUser = this.accountRepository.findByEmail(email);
+        if (existingUser != null) {
+            throw new BadRequestException("Email already registered");
+        }
+
+        String sendCountKey = "register:sendCount:" + email;
+        Object countObj = redisTemplate.opsForValue().get(sendCountKey);
+        int count = 0;
+        if (countObj != null) {
+            if (countObj instanceof Integer) {
+                count = (Integer) countObj;
+            } else if (countObj instanceof Long) {
+                count = ((Long) countObj).intValue();
+            } else {
+                count = Integer.parseInt(countObj.toString());
+            }
+        }
+
+        if (count >= 3) {
+            throw new TooManyRequestException("Maximum limit of verification code requests (3 times) for today has been reached.");
+        }
+
+        // Generate 6-digit random code
+        String code = String.format("%06d", (int) (Math.random() * 1000000));
+
+        // Store count with 24 hours expiry
+        if (countObj == null) {
+            redisTemplate.opsForValue().set(sendCountKey, 1, java.time.Duration.ofHours(24));
+        } else {
+            redisTemplate.opsForValue().set(sendCountKey, count + 1, java.time.Duration.ofHours(24));
+        }
+
+        // Store code in Redis with 10 mins expiry
+        String codeKey = "register:code:" + email;
+        redisTemplate.opsForValue().set(codeKey, code, java.time.Duration.ofMinutes(10));
+
+        // Publish to rabbitmq
+        String jsonMessage = String.format("{\"to\":\"%s\",\"subject\":\"Email Verification Code - Diskusi Coffee\",\"code\":\"%s\"}", email, code);
+        this.rabbitmqService.sendMessage(
+                "Email Verification Code",
+                "emailQueue.verificationCode",
+                "email.queue",
+                ExchangeType.DIRECT,
+                null,
+                jsonMessage,
+                true,
+                false,
+                false,
+                null
+        );
+
+        ResponseModel<Object> response = new ResponseModel<>(true, "Verification code has been sent to your email.", null);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<Object>> loginGooglePopup(String code) throws Exception {
+        // Exchange auth code for ID Token. For popup flow, redirectUri must be "postmessage".
+        String idTokenString = GoogleTokenUtils.exchangeCodeForTokens(code, CLIENT_ID, CLIENT_SECRET, "postmessage");
+        GoogleIdToken.Payload payload = GoogleTokenUtils.verifyGoogleToken(idTokenString, CLIENT_ID);
+
+        String email = (String) payload.get("email");
+        boolean emailVerified = (boolean) payload.get("email_verified");
+        String aud = (String) payload.get("aud");
+
+        if (!emailVerified) {
+            throw new BadRequestException("Google email not verified");
+        }
+
+        if (!CLIENT_ID.equals(aud)) {
+            throw new BadRequestException("Audience mismatch");
+        }
+
+        AccountModel user = this.accountRepository.findByEmail(email);
+        if (user == null) {
+            // User does not exist, require password setting/registration
+            String name = (String) payload.get("name");
+            String registrationToken = jwtService.createRegistrationToken(email, name);
+
+            HashMap<String, Object> responseData = new HashMap<>();
+            responseData.put("registerRequired", true);
+            responseData.put("registrationToken", registrationToken);
+            responseData.put("email", email);
+            responseData.put("fullName", name);
+
+            ResponseModel<Object> response = new ResponseModel<>(true, "Google registration required", responseData);
+            return ResponseEntity.status(HttpStatus.OK).body(response);
+        }
+
+        // User exists, login directly
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+
+        HashMap<String, Object> responseData = new HashMap<>();
+        responseData.put("registerRequired", false);
+        responseData.put("authData", data);
+
+        ResponseModel<Object> response = new ResponseModel<>(true, "Login successful", responseData);
+        return ResponseEntity.status(HttpStatus.OK)
+                .header("Set-Cookie", cookie.toString())
+                .body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<TokenResponseDto>> googleRegister(String registrationToken, String password) throws Exception {
+        Claims claims = jwtService.getClaims(registrationToken);
+        if (!claims.get("type").equals(TokenType.REGISTRATION.name())) {
+            throw new BadRequestException("Registration token is invalid");
+        }
+
+        String email = claims.get("email", String.class);
+        String fullName = claims.get("fullName", String.class);
+
+        AccountModel existingUser = this.accountRepository.findByEmail(email);
+        if (existingUser != null) {
+            throw new BadRequestException("Email already registered");
+        }
+
+        AccountModel user = new AccountModel();
+        RoleModel role = new RoleModel();
+        role.setRoleId(2); // Customer
+        user.setRole(role);
+        user.setFullName(fullName);
+        user.setEmail(email);
+        user.setPassword(PasswordUtils.hashPassword(password));
+        user.setPhoto(null);
+        user.setCreatedBy(null);
+
+        this.accountRepository.save(user);
+
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Google registration successful", data);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("Set-Cookie", cookie.toString())
@@ -176,30 +338,30 @@ public class AccountService {
     @Transactional(Transactional.TxType.REQUIRED)
     public ResponseEntity<ResponseModel<TokenResponseDto>> refreshToken(String refreshToken) {
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
-            throw new BadRequestException("Refresh token tidak ditemukan");
+            throw new BadRequestException("Refresh token not found");
         }
 
         Claims claims = jwtService.getClaims(refreshToken);
 
         if (!claims.get("type").equals(TokenType.REFRESH.name())) {
-            throw new BadRequestException("Refresh token tidak valid");
+            throw new BadRequestException("Refresh token is invalid");
         }
 
         boolean isExpired = claims.getExpiration().before(new Date());
 
         if (isExpired) {
-            throw new NotAuthorizedException("Refresh token telah kedaluwarsa");
+            throw new NotAuthorizedException("Refresh token has expired");
         }
 
         AccountModel user = this.accountRepository.findByUserId(Integer.parseInt(claims.get("userId").toString()));
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         AccountCacheDto tokenFromDb = this.getTokenFromDb(refreshToken, user);
         if (tokenFromDb == null) {
-            throw new BadRequestException("Refresh token tidak valid ");
+            throw new BadRequestException("Refresh token is invalid");
         }
 
         boolean isWillBeExpired = claims.getExpiration().before(new Date(System.currentTimeMillis() + 24 * 60 * 60 * 3000)); // 3 days
@@ -209,7 +371,7 @@ public class AccountService {
             TokenResponseDto data = new TokenResponseDto();
             data.setAccessToken(newAccessToken);
             data.setRefreshToken(refreshToken);
-            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token berhasil", data);
+            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token successful", data);
             return ResponseEntity.status(HttpStatus.OK)
                     .body(response);
         } else {
@@ -218,7 +380,7 @@ public class AccountService {
             this.refreshTokenService.deleteRefreshTokenByToken(refreshToken);
             ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
 
-            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token berhasil", data);
+            ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Refresh token successful", data);
             return ResponseEntity.status(HttpStatus.OK)
                     .header("Set-Cookie", cookie.toString())
                     .body(response);
@@ -228,11 +390,11 @@ public class AccountService {
     @Transactional(Transactional.TxType.REQUIRED)
     public ResponseEntity<ResponseModel<Object>> logout(String refreshToken) {
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
-            throw new BadRequestException("Refresh token tidak ditemukan");
+            throw new BadRequestException("Refresh token not found");
         }
         this.refreshTokenService.deleteRefreshTokenByToken(refreshToken);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", "", 0); // expire the cookie
-        ResponseModel<Object> response = new ResponseModel<>(true, "Logout berhasil", null);
+        ResponseModel<Object> response = new ResponseModel<>(true, "Logout successful", null);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
@@ -240,11 +402,11 @@ public class AccountService {
 
     public ResponseEntity<ResponseModel<MeResponseDto>> me(CurrentUserDto user) {
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
         AccountProjection data = this.accountRepository.findByUserId(user.getUserId(), AccountProjection.class);
         if (data == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
         MeResponseDto me = new MeResponseDto();
         me.setUserId(data.getUserId());
@@ -252,7 +414,9 @@ public class AccountService {
         me.setFullName(data.getFullName());
         me.setPhoto(data.getPhoto());
         me.setRole(data.getRole().getRoleName());
-        ResponseModel<MeResponseDto> response = new ResponseModel<>(true, "Data user ditemukan", me);
+        me.setRoleId(data.getRole().getRoleId());
+        me.setPermissions(this.permissionCacheService.getRolePermissions(data.getRole().getRoleId()));
+        ResponseModel<MeResponseDto> response = new ResponseModel<>(true, "User data found", me);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -261,11 +425,11 @@ public class AccountService {
         AccountModel user = this.accountRepository.findByEmail(email);
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         if (this.resetTokenPasswordService.checkWasLimitOneDay(user)) {
-            throw new TooManyRequestException("Anda telah mencapai batas maksimal permintaan reset password hari ini. Silakan coba lagi besok.");
+            throw new TooManyRequestException("You have reached the maximum daily limit for password reset requests. Please try again tomorrow.");
         }
 
         String resetToken = jwtService.createToken(user, TokenType.RESET_PASSWORD);
@@ -291,7 +455,7 @@ public class AccountService {
         );
 
 
-        ResponseModel<String> response = new ResponseModel<>(true, "Link reset password telah dikirim ke email Anda jika email terdaftar.", null);
+        ResponseModel<String> response = new ResponseModel<>(true, "Password reset link has been sent to your email if registered.", null);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -307,13 +471,13 @@ public class AccountService {
         }
 
         if (!claims.get("type").equals(TokenType.RESET_PASSWORD.name())) {
-            throw new BadRequestException("Token tidak valid");
+            throw new BadRequestException("Token is invalid");
         }
 
         AccountModel user = this.accountRepository.findByUserId(Integer.parseInt(claims.get("userId").toString()));
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         user.setPassword(PasswordUtils.hashPassword(newPassword));
@@ -323,7 +487,7 @@ public class AccountService {
 
         HashMap<String, Object> emailPayload = new HashMap<>();
         emailPayload.put("to", user.getEmail());
-        emailPayload.put("subject", "Reset Password Berhasil");
+        emailPayload.put("subject", "Reset Password Successful");
         ObjectMapper mapper = new ObjectMapper();
         String jsonMessage = mapper.writeValueAsString(emailPayload);
 
@@ -341,7 +505,7 @@ public class AccountService {
         );
 
 
-        ResponseModel<String> response = new ResponseModel<>(true, "Password berhasil diubah", null);
+        ResponseModel<String> response = new ResponseModel<>(true, "Password changed successfully", null);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -379,7 +543,7 @@ public class AccountService {
         responsePagination.setPageSize(responseData.getSize());
         responsePagination.setLastPage(responseData.isLast());
 
-        ResponseModel<PaginationResponseDto<BaristaResponseDto>> response = new ResponseModel<>(true, "Data barista ditemukan", responsePagination);
+        ResponseModel<PaginationResponseDto<BaristaResponseDto>> response = new ResponseModel<>(true, "Barista data found", responsePagination);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -389,17 +553,17 @@ public class AccountService {
         AccountModel user = this.accountRepository.findById(baristaId).orElse(null);
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         if (user.getRole().getRoleId() != 3) {
-            throw new BadRequestException("User bukan barista");
+            throw new BadRequestException("User is not a barista");
         }
 
         this.refreshTokenService.deleteRefreshTokenByUser(user);
         this.accountRepository.delete(user);
 
-        ResponseModel<String> response = new ResponseModel<>(true, "Barista berhasil dihapus", null);
+        ResponseModel<String> response = new ResponseModel<>(true, "Barista deleted successfully", null);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }
@@ -409,7 +573,7 @@ public class AccountService {
         AccountModel user = this.accountRepository.findById(userId).orElse(null);
 
         if (user == null) {
-            throw new NotFoundException("User tidak ditemukan");
+            throw new NotFoundException("User not found");
         }
 
         user.setFullName(fullName);
@@ -423,7 +587,7 @@ public class AccountService {
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
 
-        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "User berhasil diupdate", data);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "User updated successfully", data);
         return ResponseEntity.status(HttpStatus.OK)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
@@ -431,6 +595,154 @@ public class AccountService {
 
     public List<NamesResponseDto> getNamesByUserIds(Integer[] userIds) {
         return this.accountRepository.findByUserIdIn(userIds);
+    }
+
+    public ResponseEntity<ResponseModel<PaginationResponseDto<UserResponseDto>>> listUsers(Pageable pageable, Integer roleId, String searchValue, String searchKey) {
+        Specification<AccountModel> spec = (root, query, cb) -> {
+            Predicate predicate = cb.conjunction();
+            if (roleId != null && roleId > 0) {
+                predicate = cb.and(predicate, cb.equal(root.get("role").get("roleId"), roleId));
+            }
+            if (searchValue != null && !searchValue.trim().isEmpty()) {
+                String term = "%" + searchValue.trim().toLowerCase() + "%";
+                if (searchKey != null && !searchKey.trim().isEmpty()) {
+                    predicate = cb.and(predicate, cb.like(cb.lower(root.get(searchKey)), term));
+                } else {
+                    Predicate nameMatch = cb.like(cb.lower(root.get("fullName")), term);
+                    Predicate emailMatch = cb.like(cb.lower(root.get("email")), term);
+                    predicate = cb.and(predicate, cb.or(nameMatch, emailMatch));
+                }
+            }
+            return predicate;
+        };
+
+        Page<AccountModel> pageData = accountRepository.findAll(spec, pageable);
+        Page<UserResponseDto> responseData = pageData.map(this::mapToUserResponseDto);
+
+        PaginationResponseDto<UserResponseDto> responsePagination = new PaginationResponseDto<>();
+        responsePagination.setData(responseData.getContent());
+        responsePagination.setTotalData(responseData.getTotalElements());
+        responsePagination.setTotalPages(responseData.getTotalPages());
+        responsePagination.setCurrentPage(responseData.getNumber() + 1);
+        responsePagination.setPageSize(responseData.getSize());
+        responsePagination.setLastPage(responseData.isLast());
+
+        ResponseModel<PaginationResponseDto<UserResponseDto>> response = new ResponseModel<>(true, "Users retrieved successfully", responsePagination);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    public ResponseEntity<ResponseModel<UserResponseDto>> getUserById(Integer userId) {
+        AccountModel user = accountRepository.findById(userId).orElse(null);
+        if (user == null) {
+            throw new NotFoundException("User not found with id: " + userId);
+        }
+        return ResponseEntity.ok(new ResponseModel<>(true, "User details retrieved successfully", mapToUserResponseDto(user)));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<UserResponseDto>> createUserByAdmin(CreateUserAdminRequestDto request, CurrentUserDto currentUser) {
+        AccountModel existingUser = accountRepository.findByEmail(request.getEmail().trim().toLowerCase());
+        if (existingUser != null) {
+            throw new BadRequestException("Email already registered");
+        }
+
+        RoleModel role = roleRepository.findById(request.getRoleId())
+                .orElseThrow(() -> new BadRequestException("Invalid role ID: " + request.getRoleId()));
+
+        AccountModel user = new AccountModel();
+        user.setFullName(request.getFullName().trim());
+        user.setEmail(request.getEmail().trim().toLowerCase());
+        user.setPassword(PasswordUtils.hashPassword(request.getPassword()));
+        user.setRole(role);
+        user.setCreatedBy(currentUser != null ? currentUser.getUserId() : null);
+        user.setUpdatedBy(currentUser != null ? currentUser.getUserId() : null);
+        user.setCreatedAt(new Date());
+        user.setUpdatedAt(new Date());
+
+        accountRepository.save(user);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new ResponseModel<>(true, "User created successfully", mapToUserResponseDto(user)));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<UserResponseDto>> updateUserByAdmin(Integer userId, UpdateUserAdminRequestDto request, CurrentUserDto currentUser) {
+        AccountModel user = accountRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found with id: " + userId));
+
+        // Security rule 1: User cannot modify their own role
+        if (currentUser != null && currentUser.getUserId().equals(userId)) {
+            if (user.getRole() != null && user.getRole().getRoleId() != request.getRoleId()) {
+                throw new BadRequestException("You cannot modify your own role");
+            }
+        }
+
+        // Security rule 2: Super Admin role (userId = 1) cannot be changed
+        if (userId.equals(1) && request.getRoleId() != 1) {
+            throw new BadRequestException("Super Admin role cannot be changed");
+        }
+
+        RoleModel role = roleRepository.findById(request.getRoleId())
+                .orElseThrow(() -> new BadRequestException("Invalid role ID: " + request.getRoleId()));
+
+        user.setFullName(request.getFullName().trim());
+        user.setRole(role);
+        if (request.getPhoto() != null) {
+            user.setPhoto(request.getPhoto());
+        }
+        user.setUpdatedBy(currentUser != null ? currentUser.getUserId() : null);
+        user.setUpdatedAt(new Date());
+
+        accountRepository.save(user);
+
+        return ResponseEntity.ok(new ResponseModel<>(true, "User updated successfully", mapToUserResponseDto(user)));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> resetPasswordByAdmin(Integer userId, String newPassword, CurrentUserDto currentUser) {
+        AccountModel user = accountRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found with id: " + userId));
+
+        user.setPassword(PasswordUtils.hashPassword(newPassword));
+        user.setUpdatedBy(currentUser != null ? currentUser.getUserId() : null);
+        user.setUpdatedAt(new Date());
+        accountRepository.save(user);
+
+        // Invalidate active refresh tokens for the user
+        refreshTokenService.deleteRefreshTokenByUser(user);
+
+        return ResponseEntity.ok(new ResponseModel<>(true, "Password updated successfully for " + user.getEmail(), null));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> deleteUserByAdmin(Integer userId, CurrentUserDto currentUser) {
+        if (userId.equals(1)) {
+            throw new BadRequestException("Super Admin account cannot be deleted");
+        }
+        if (currentUser != null && currentUser.getUserId().equals(userId)) {
+            throw new BadRequestException("You cannot delete your own account");
+        }
+
+        AccountModel user = accountRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found with id: " + userId));
+
+        refreshTokenService.deleteRefreshTokenByUser(user);
+        accountRepository.delete(user);
+
+        return ResponseEntity.ok(new ResponseModel<>(true, "User deleted successfully", null));
+    }
+
+    private UserResponseDto mapToUserResponseDto(AccountModel user) {
+        return UserResponseDto.builder()
+                .userId(user.getUserId())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .photo(user.getPhoto())
+                .roleId(user.getRole() != null ? user.getRole().getRoleId() : 0)
+                .roleName(user.getRole() != null ? user.getRole().getRoleName() : "")
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
     }
 
     private TokenResponseDto createTokenResponse(AccountModel user) {

@@ -3,16 +3,15 @@ package com.account_service.be.internal;
 import com.account_service.be.account.dto.NamesResponseDto;
 import com.account_service.be.annotation.ValidateSignature;
 import com.account_service.be.exception.BadRequestException;
+import com.account_service.be.roleFeature.dto.PermissionActionDto;
 import com.account_service.be.utils.commons.ResponseModel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -36,5 +35,20 @@ public class InternalRoute {
                 .parallel()
                 .toArray(Integer[]::new);
         return internalService.getNameUsers(userIdsArray);
+    }
+
+    @GetMapping("/user-by-email")
+    @ValidateSignature
+    public ResponseEntity<ResponseModel<com.account_service.be.account.dto.UserInternalResponseDto>> getUserByEmail(@RequestParam("email") String email) {
+        if (email == null || email.trim().isEmpty()) {
+            throw new BadRequestException("Email parameter is required");
+        }
+        return internalService.getUserByEmail(email.trim().toLowerCase());
+    }
+
+    @GetMapping("/roles/{roleId}/permissions")
+    @ValidateSignature
+    public ResponseEntity<ResponseModel<Map<String, PermissionActionDto>>> getRolePermissions(@PathVariable("roleId") int roleId) {
+        return internalService.getRolePermissions(roleId);
     }
 }

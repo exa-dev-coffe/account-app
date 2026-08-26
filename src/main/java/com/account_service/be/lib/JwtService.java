@@ -2,9 +2,13 @@ package com.account_service.be.lib;
 
 import com.account_service.be.account.AccountModel;
 import com.account_service.be.exception.NotAuthorizedException;
+import com.account_service.be.roleFeature.PermissionCacheService;
+import com.account_service.be.roleFeature.dto.PermissionActionDto;
 import com.account_service.be.utils.enums.TokenType;
 import io.jsonwebtoken.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -20,6 +24,13 @@ public class JwtService {
     @Value("${app.jwt.secret}")
     private String SECRET_KEY;
 
+    private final PermissionCacheService permissionCacheService;
+
+    @Autowired
+    public JwtService(@Lazy PermissionCacheService permissionCacheService) {
+        this.permissionCacheService = permissionCacheService;
+    }
+
     private SecretKey getSigningKey() {
         return new SecretKeySpec(
                 SECRET_KEY.getBytes(StandardCharsets.UTF_8),
@@ -33,8 +44,11 @@ public class JwtService {
         claims.put("email", user.getEmail());
         claims.put("userId", user.getUserId());
         claims.put("type", type.name());
-        claims.put("role", user.getRole().getRoleName());
-        claims.put("photo", user.getPhoto());
+        if (user.getRole() != null) {
+            claims.put("role", user.getRole().getRoleName());
+            claims.put("roleId", user.getRole().getRoleId());
+        }
+
         return claims;
     }
 
@@ -45,6 +59,7 @@ public class JwtService {
             case REFRESH -> new Date(now + 1000L * 60 * 60 * 24 * 7); // 7 hari
             case RESET_PASSWORD -> new Date(now + 1000L * 60 * 5); // 5 menit
             case EXCHANGE -> new Date(now + 1000L * 60 * 10); // 3 menit
+            case REGISTRATION -> new Date(now + 1000L * 60 * 15); // 15 menit
             default -> throw new IllegalArgumentException("Unknown token type: " + type);
         };
     }
@@ -60,10 +75,28 @@ public class JwtService {
                 .compact();
     }
 
+    // Membuat token JWT pendaftaran sementara untuk Google
+    public String createRegistrationToken(String email, String fullName) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("email", email);
+        claims.put("fullName", fullName);
+        claims.put("type", TokenType.REGISTRATION.name());
+
+        long now = System.currentTimeMillis();
+        Date expiration = new Date(now + 1000L * 60 * 15); // 15 menit
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(email)
+                .setIssuedAt(new Date())
+                .setExpiration(expiration)
+                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
+                .compact();
+    }
+
     // Ambil claims dari token
     public Claims getClaims(String token) {
         try {
-
             return Jwts.parserBuilder()
                     .setSigningKey(getSigningKey())
                     .build()

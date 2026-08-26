@@ -25,10 +25,10 @@ public class UploadService {
 
     public ResponseEntity<ResponseModel<UploadResponseDto>> uploadProfile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BadRequestException("File tidak ditemukan");
+            throw new BadRequestException("File not found");
         }
         if (!validateFile(file)) {
-            throw new BadRequestException("File tidak valid. Pastikan file adalah gambar (JPEG, PNG) dan ukuran maksimal 5MB.");
+            throw new BadRequestException("Invalid file. Make sure file is an image (JPEG, PNG) and maximum size is 5MB.");
         }
         try {
             // random word  di ujungnya ambil extensionnya
@@ -43,25 +43,25 @@ public class UploadService {
             String url = minioService.uploadFile(file, objectName);
             UploadResponseDto data = new UploadResponseDto();
             data.setUrl(url);
-            ResponseModel<UploadResponseDto> response = new ResponseModel<>(true, "Upload berhasil", data);
+            ResponseModel<UploadResponseDto> response = new ResponseModel<>(true, "Upload successful", data);
             return ResponseEntity.status(HttpStatus.OK)
                     .body(response);
         } catch (Exception e) {
             log.error("Error upload file: {}", e.getMessage());
-            throw new BadRequestException("Gagal mengupload file");
+            throw new BadRequestException("Failed to upload file");
         }
     }
 
     public ResponseEntity<ResponseModel<String>> deleteFile(String url) {
         if (url == null || url.isEmpty()) {
-            throw new BadRequestException("URL tidak ditemukan");
+            throw new BadRequestException("URL not found");
         }
         if (!url.startsWith("https://storage.eka-dev.cloud/project")) {
-            throw new BadRequestException("URL tidak valid");
+            throw new BadRequestException("Invalid URL");
         }
         String objectName = url.split("project")[1].substring(1);
         minioService.deleteFile(objectName);
-        ResponseModel<String> response = new ResponseModel<>(true, "Delete berhasil", objectName);
+        ResponseModel<String> response = new ResponseModel<>(true, "Delete successful", objectName);
         return ResponseEntity.status(HttpStatus.OK)
                 .body(response);
     }

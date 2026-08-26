@@ -39,15 +39,18 @@ public class CurrentUserResolver implements HandlerMethodArgumentResolver {
         String token = request.getHeader("Authorization");
         if (token != null && token.startsWith("Bearer ")) {
             token = token.substring(7);
-            Claims claims = jwtService.getClaims(token); // decode token pakai jwt util kamu
+            Claims claims = jwtService.getClaims(token);
             CurrentUserDto account = new CurrentUserDto();
             account.setUserId(claims.get("userId", Integer.class));
             account.setEmail(claims.get("email", String.class));
             account.setFullName(claims.get("fullName", String.class));
+            account.setRole(claims.get("role", String.class));
+            account.setRoleId(claims.get("roleId", Integer.class));
+            account.setPhoto(claims.get("photo", String.class));
+            account.setToken(token);
             return account;
         } else {
-            return null; // atau lempar exception jika token tidak ada
+            return null;
         }
-
     }
 }

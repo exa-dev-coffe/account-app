@@ -7,7 +7,8 @@ public enum TokenType {
     ACCESS("access"),
     REFRESH("refresh"),
     EXCHANGE("exchange"),
-    RESET_PASSWORD("reset_password");
+    RESET_PASSWORD("reset_password"),
+    REGISTRATION("registration");
 
     private final String value;
 

@@ -9,6 +9,7 @@ public class ConstraintMessageResolver {
     static {
         // mapping constraint → pesan
         constraintMessages.put("uc_tm_accounts_email", "Email already exists");
+        constraintMessages.put("tm_accounts_email_unique_idx", "Email already exists");
         // tambahin constraint lain di sini
     }
 
