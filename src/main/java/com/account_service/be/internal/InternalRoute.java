@@ -37,6 +37,15 @@ public class InternalRoute {
         return internalService.getNameUsers(userIdsArray);
     }
 
+    @GetMapping("/user-by-email")
+    @ValidateSignature
+    public ResponseEntity<ResponseModel<com.account_service.be.account.dto.UserInternalResponseDto>> getUserByEmail(@RequestParam("email") String email) {
+        if (email == null || email.trim().isEmpty()) {
+            throw new BadRequestException("Email parameter is required");
+        }
+        return internalService.getUserByEmail(email.trim().toLowerCase());
+    }
+
     @GetMapping("/roles/{roleId}/permissions")
     @ValidateSignature
     public ResponseEntity<ResponseModel<Map<String, PermissionActionDto>>> getRolePermissions(@PathVariable("roleId") int roleId) {
