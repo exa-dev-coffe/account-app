@@ -110,9 +110,9 @@ jobs:
           export KUBECONFIG=/home/deploy/.kube/config
 
           # Patch the deployment to use the new SHA tag
-          kubectl set image deployment/account-service-coffe -n dev-coffe \
+          kubectl set image deployment/account-service-coffe -n coffe \
            account-service-coffe=ghcr.io/${{ github.repository_owner }}/account-service-coffe:${{ steps.vars.outputs.sha }}
 
           # Optional: show rollout
-          # kubectl rollout status deployment/account-service-coffe -n dev-coffe
+          # kubectl rollout status deployment/account-service-coffe -n coffe
           EOF
