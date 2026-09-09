@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
+
 @Slf4j
 @Component
 public class MinioService {
@@ -39,6 +41,21 @@ public class MinioService {
                         .object(objectName)
                         .stream(file.getInputStream(), file.getSize(), -1)
                         .contentType(file.getContentType())
+                        .build()
+        );
+
+        // URL akses file
+        return url + "/" + bucketName + "/" + objectName;
+    }
+
+    // Upload byte array
+    public String uploadBytes(byte[] data, String objectName, String contentType) throws Exception {
+        minioClient.putObject(
+                PutObjectArgs.builder()
+                        .bucket(bucketName)
+                        .object(objectName)
+                        .stream(new ByteArrayInputStream(data), data.length, -1)
+                        .contentType(contentType)
                         .build()
         );
 
