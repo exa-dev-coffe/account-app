@@ -398,6 +398,18 @@ public class AccountService {
             throw new BadRequestException("This Google account is already linked to another account");
         }
 
+        AccountModel existingEmail = this.accountRepository.findByEmail(email);
+        if (existingEmail != null && existingEmail.getUserId() != user.getUserId()) {
+            throw new BadRequestException("An account with this Google email is already registered");
+        }
+
+        // If the current primary email is a private relay email or empty, replace it with the verified Google email
+        if (user.getEmail() != null && user.getEmail().toLowerCase().endsWith("@privaterelay.appleid.com")) {
+            user.setEmail(email);
+        } else if (user.getEmail() == null || user.getEmail().isBlank()) {
+            user.setEmail(email);
+        }
+
         user.setGoogleSub(sub);
         user.setGoogleEmail(email);
         this.accountRepository.save(user);
