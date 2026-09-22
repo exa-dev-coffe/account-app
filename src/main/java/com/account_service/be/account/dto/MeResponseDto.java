@@ -13,5 +13,7 @@ public class MeResponseDto {
     private String role;
     private Integer roleId;
     private String photo;
+    private Boolean isAppleLinked;
+    private String appleEmail;
     private Map<String, PermissionActionDto> permissions;
 }

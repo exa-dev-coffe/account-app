@@ -150,6 +150,58 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
+    @DisplayName("POST /api/1.0/auth/apple/events - Webhook Handler (200)")
+    void testAppleEventsWebhook() throws Exception {
+        String webhookBody = """
+                {
+                    "payload": "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL2FwcGxlaWQuYXBwbGUuY29tIiwiYXVkIjoiZHVtbXktYXBwbGUtaWQiLCJpYXQiOjE2MDAwMDAwMDAsImp0aSI6ImV2dC0xMjMiLCJldmVudHMiOiJ7XCJ0eXBlXCI6XCJjb25zZW50LXJldm9rZWRcIixcInN1YlwiOlwiYXBwbGUtc3ViLTEyM1wifSJ9.signature"
+                }
+                """;
+
+        mockMvc.perform(post("/api/1.0/auth/apple/events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(webhookBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/1.0/auth/apple/unbind - Rejection for Private Relay Email without valid setup (400)")
+    void testUnbindAppleWithRelayEmailFails() throws Exception {
+        AccountModel relayAccount = createTestAccount("user@privaterelay.appleid.com", "customer");
+        relayAccount.setAppleSub("apple-sub-relay-123");
+        relayAccount.setAppleEmail("user@privaterelay.appleid.com");
+        accountRepository.save(relayAccount);
+
+        String jwt = createTestJwt(relayAccount);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/1.0/auth/apple/unbind")
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("private relay email")));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/1.0/auth/apple/unbind - Success with Standard Email (200)")
+    void testUnbindAppleSuccess() throws Exception {
+        AccountModel normalAccount = createTestAccount("standarduser@gmail.com", "customer");
+        normalAccount.setAppleSub("apple-sub-standard-123");
+        normalAccount.setAppleEmail("standarduser@gmail.com");
+        accountRepository.save(normalAccount);
+
+        String jwt = createTestJwt(normalAccount);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/1.0/auth/apple/unbind")
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        AccountModel updated = accountRepository.findByUserId(normalAccount.getUserId());
+        org.junit.jupiter.api.Assertions.assertNull(updated.getAppleSub());
+        org.junit.jupiter.api.Assertions.assertNull(updated.getAppleEmail());
+    }
+
+    @Test
     @DisplayName("POST /api/1.0/auth/forgot-password - Invalid Email Format (400)")
     void testForgotPasswordInvalidEmail() throws Exception {
         String body = """

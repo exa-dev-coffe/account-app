@@ -41,4 +41,10 @@ public class AccountModel extends BaseModal {
 
     @Column(name = "deleted_by", nullable = true)
     private Integer deletedBy;
+
+    @Column(name = "apple_sub", nullable = true)
+    private String appleSub;
+
+    @Column(name = "apple_email", nullable = true)
+    private String appleEmail;
 }

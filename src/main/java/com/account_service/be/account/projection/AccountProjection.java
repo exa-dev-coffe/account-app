@@ -16,4 +16,8 @@ public interface AccountProjection {
     }
 
     String getPhoto();
+
+    String getAppleSub();
+
+    String getAppleEmail();
 }

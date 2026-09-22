@@ -13,6 +13,10 @@ import java.util.List;
 public interface AccountRepository extends JpaRepository<AccountModel, Integer>, JpaSpecificationExecutor<AccountModel> {
     AccountModel findByEmail(String email);
 
+    AccountModel findByAppleSub(String appleSub);
+
+    AccountModel findByAppleEmail(String appleEmail);
+
     // Ambil entity langsung
     AccountModel findByUserId(Integer userId);
 

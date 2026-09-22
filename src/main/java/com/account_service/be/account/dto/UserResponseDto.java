@@ -18,6 +18,8 @@ public class UserResponseDto {
     private String photo;
     private int roleId;
     private String roleName;
+    private Boolean isAppleLinked;
+    private String appleEmail;
     private Date createdAt;
     private Date updatedAt;
 }

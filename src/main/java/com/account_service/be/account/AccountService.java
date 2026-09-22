@@ -13,6 +13,7 @@ import com.account_service.be.refreshToken.dto.AccountCacheDto;
 import com.account_service.be.role.RoleModel;
 import com.account_service.be.role.RoleRepository;
 import com.account_service.be.tokenResetPassword.ResetTokenPasswordService;
+import com.account_service.be.utils.AppleTokenUtils;
 import com.account_service.be.utils.GoogleTokenUtils;
 import com.account_service.be.utils.PasswordUtils;
 import com.account_service.be.utils.commons.CurrentUserDto;
@@ -50,13 +51,14 @@ public class AccountService {
     private final RefreshTokenService refreshTokenService;
     private final String CLIENT_ID;
     private final String CLIENT_SECRET;
+    private final String APPLE_CLIENT_ID;
     private final RabbitmqService rabbitmqService;
     private final String frontendUrl;
     private final ResetTokenPasswordService resetTokenPasswordService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final com.account_service.be.roleFeature.PermissionCacheService permissionCacheService;
 
-    public AccountService(AccountRepository accountRepository, RoleRepository roleRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService, RedisTemplate<String, Object> redisTemplate, @Value("${spring.security.oauth2.authorizationserver.client.google.client-secret}") String clientSecret, com.account_service.be.roleFeature.PermissionCacheService permissionCacheService) {
+    public AccountService(AccountRepository accountRepository, RoleRepository roleRepository, JwtService jwtService, @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}") String clientId, RefreshTokenService refreshTokenService, RabbitmqService rabbitmqService, @Value("${app.frontend.url}") String frontendUrl, ResetTokenPasswordService resetTokenPasswordService, RedisTemplate<String, Object> redisTemplate, @Value("${spring.security.oauth2.authorizationserver.client.google.client-secret}") String clientSecret, com.account_service.be.roleFeature.PermissionCacheService permissionCacheService, @Value("${spring.security.oauth2.authorizationserver.client.apple.client-id:dummy-apple-id}") String appleClientId) {
         this.accountRepository = accountRepository;
         this.roleRepository = roleRepository;
         this.resetTokenPasswordService = resetTokenPasswordService;
@@ -65,6 +67,7 @@ public class AccountService {
         this.refreshTokenService = refreshTokenService;
         this.jwtService = jwtService;
         this.CLIENT_ID = clientId;
+        this.APPLE_CLIENT_ID = appleClientId;
         this.frontendUrl = frontendUrl;
         this.redisTemplate = redisTemplate;
         this.permissionCacheService = permissionCacheService;
@@ -336,6 +339,209 @@ public class AccountService {
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<Object>> loginApplePopup(AppleAuthRequestDto request) throws Exception {
+        AppleTokenUtils.AppleTokenPayload payload = AppleTokenUtils.verifyAppleToken(request.getIdentityToken(), APPLE_CLIENT_ID);
+
+        String sub = payload.getSub();
+        String email = payload.getEmail();
+
+        AccountModel user = null;
+        if (sub != null) {
+            user = this.accountRepository.findByAppleSub(sub);
+        }
+
+        if (user == null && email != null) {
+            user = this.accountRepository.findByEmail(email);
+            if (user != null) {
+                user.setAppleSub(sub);
+                user.setAppleEmail(email);
+                this.accountRepository.save(user);
+            }
+        }
+
+        if (user == null) {
+            String fullName = "";
+            if (request.getFirstName() != null || request.getLastName() != null) {
+                fullName = ((request.getFirstName() != null ? request.getFirstName() : "") + " " +
+                        (request.getLastName() != null ? request.getLastName() : "")).trim();
+            }
+            if (fullName.isEmpty() && email != null && email.contains("@")) {
+                fullName = email.substring(0, email.indexOf("@"));
+            }
+            if (fullName.isEmpty()) {
+                fullName = "Apple User";
+            }
+
+            String registrationToken = jwtService.createRegistrationToken(email, fullName, sub);
+
+            HashMap<String, Object> responseData = new HashMap<>();
+            responseData.put("registerRequired", true);
+            responseData.put("registrationToken", registrationToken);
+            responseData.put("email", email != null ? email : "");
+            responseData.put("fullName", fullName);
+            responseData.put("appleSub", sub);
+
+            ResponseModel<Object> response = new ResponseModel<>(true, "Apple registration required", responseData);
+            return ResponseEntity.status(HttpStatus.OK).body(response);
+        }
+
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+
+        HashMap<String, Object> responseData = new HashMap<>();
+        responseData.put("registerRequired", false);
+        responseData.put("authData", data);
+
+        ResponseModel<Object> response = new ResponseModel<>(true, "Login successful", responseData);
+        return ResponseEntity.status(HttpStatus.OK)
+                .header("Set-Cookie", cookie.toString())
+                .body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<TokenResponseDto>> appleRegister(String registrationToken, String password) throws Exception {
+        Claims claims = jwtService.getClaims(registrationToken);
+        if (!claims.get("type").equals(TokenType.REGISTRATION.name())) {
+            throw new BadRequestException("Registration token is invalid");
+        }
+
+        String email = claims.get("email", String.class);
+        String fullName = claims.get("fullName", String.class);
+        String appleSub = claims.get("appleSub", String.class);
+
+        if (email != null && !email.isBlank()) {
+            AccountModel existingUser = this.accountRepository.findByEmail(email);
+            if (existingUser != null) {
+                throw new BadRequestException("Email already registered");
+            }
+        }
+        if (appleSub != null) {
+            AccountModel existingApple = this.accountRepository.findByAppleSub(appleSub);
+            if (existingApple != null) {
+                throw new BadRequestException("Apple account already registered");
+            }
+        }
+
+        AccountModel user = new AccountModel();
+        RoleModel role = new RoleModel();
+        role.setRoleId(2); // Customer
+        user.setRole(role);
+        user.setFullName(fullName != null && !fullName.isBlank() ? fullName : "Apple User");
+        user.setEmail(email != null && !email.isBlank() ? email : (appleSub + "@privaterelay.appleid.com"));
+        user.setPassword(PasswordUtils.hashPassword(password));
+        user.setAppleSub(appleSub);
+        user.setAppleEmail(email);
+        user.setPhoto(null);
+        user.setCreatedBy(null);
+
+        this.accountRepository.save(user);
+
+        TokenResponseDto data = this.createTokenResponse(user);
+        this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
+        ResponseModel<TokenResponseDto> response = new ResponseModel<>(true, "Apple registration successful", data);
+        ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .header("Set-Cookie", cookie.toString())
+                .body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> bindApple(CurrentUserDto currentUser, AppleAuthRequestDto request) throws Exception {
+        if (currentUser == null) {
+            throw new NotAuthorizedException("Unauthorized");
+        }
+
+        AccountModel user = this.accountRepository.findByUserId(currentUser.getUserId());
+        if (user == null) {
+            throw new NotFoundException("User not found");
+        }
+
+        AppleTokenUtils.AppleTokenPayload payload = AppleTokenUtils.verifyAppleToken(request.getIdentityToken(), APPLE_CLIENT_ID);
+        String appleSub = payload.getSub();
+        String appleEmail = payload.getEmail();
+
+        AccountModel existingWithApple = this.accountRepository.findByAppleSub(appleSub);
+        if (existingWithApple != null && existingWithApple.getUserId() != user.getUserId()) {
+            throw new BadRequestException("This Apple account is already linked to another user");
+        }
+
+        user.setAppleSub(appleSub);
+        user.setAppleEmail(appleEmail != null ? appleEmail : user.getEmail());
+        this.accountRepository.save(user);
+
+        return ResponseEntity.ok(new ResponseModel<>(true, "Apple account linked successfully", null));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> unbindApple(CurrentUserDto currentUser) {
+        if (currentUser == null) {
+            throw new NotAuthorizedException("Unauthorized");
+        }
+
+        AccountModel user = this.accountRepository.findByUserId(currentUser.getUserId());
+        if (user == null) {
+            throw new NotFoundException("User not found");
+        }
+
+        if (user.getAppleSub() == null) {
+            throw new BadRequestException("No Apple account is currently linked");
+        }
+
+        // Secondary unbind rule:
+        // User CAN unbind if they have a non-relay primary email and a password.
+        String email = user.getEmail();
+        if (email == null || email.toLowerCase().endsWith("@privaterelay.appleid.com")) {
+            throw new BadRequestException("Cannot unbind Apple account because your primary email is a private relay email. Please update your email to a regular email address first.");
+        }
+
+        if (user.getPassword() == null || user.getPassword().isBlank()) {
+            throw new BadRequestException("Cannot unbind Apple account without a set password. Please set a password first.");
+        }
+
+        user.setAppleSub(null);
+        user.setAppleEmail(null);
+        this.accountRepository.save(user);
+
+        return ResponseEntity.ok(new ResponseModel<>(true, "Apple account unlinked successfully", null));
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> handleAppleEvent(String payloadJwt) {
+        try {
+            AppleTokenUtils.AppleEventPayload event = AppleTokenUtils.verifyAndDecodeAppleEvent(payloadJwt, APPLE_CLIENT_ID);
+            String sub = event.getSub();
+            String type = event.getType();
+
+            log.info("Received Apple Server-to-Server event: type={}, sub={}", type, sub);
+
+            if (sub != null) {
+                AccountModel user = this.accountRepository.findByAppleSub(sub);
+                if (user != null) {
+                    if ("consent-revoked".equals(type) || "account-delete".equals(type)) {
+                        log.info("Processing Apple revocation/deletion event for user id: {}", user.getUserId());
+                        this.refreshTokenService.deleteRefreshTokenByUser(user);
+
+                        String email = user.getEmail();
+                        if (email != null && !email.toLowerCase().endsWith("@privaterelay.appleid.com")) {
+                            user.setAppleSub(null);
+                            user.setAppleEmail(null);
+                            this.accountRepository.save(user);
+                        }
+                    } else if ("email-enabled".equals(type) || "email-disabled".equals(type)) {
+                        log.info("Apple private email forwarding status changed for user id {}: {}", user.getUserId(), type);
+                    }
+                }
+            }
+
+            return ResponseEntity.ok(new ResponseModel<>(true, "Apple event processed successfully", null));
+        } catch (Exception e) {
+            log.error("Error processing Apple webhook event: {}", e.getMessage());
+            return ResponseEntity.ok(new ResponseModel<>(true, "Event received", null));
+        }
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
     public ResponseEntity<ResponseModel<TokenResponseDto>> refreshToken(String refreshToken) {
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
             throw new BadRequestException("Refresh token not found");
@@ -415,6 +621,8 @@ public class AccountService {
         me.setPhoto(data.getPhoto());
         me.setRole(data.getRole().getRoleName());
         me.setRoleId(data.getRole().getRoleId());
+        me.setIsAppleLinked(data.getAppleSub() != null);
+        me.setAppleEmail(data.getAppleEmail());
         me.setPermissions(this.permissionCacheService.getRolePermissions(data.getRole().getRoleId()));
         ResponseModel<MeResponseDto> response = new ResponseModel<>(true, "User data found", me);
         return ResponseEntity.status(HttpStatus.OK)
@@ -740,6 +948,8 @@ public class AccountService {
                 .photo(user.getPhoto())
                 .roleId(user.getRole() != null ? user.getRole().getRoleId() : 0)
                 .roleName(user.getRole() != null ? user.getRole().getRoleName() : "")
+                .isAppleLinked(user.getAppleSub() != null)
+                .appleEmail(user.getAppleEmail())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

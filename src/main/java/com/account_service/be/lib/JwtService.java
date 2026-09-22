@@ -75,11 +75,18 @@ public class JwtService {
                 .compact();
     }
 
-    // Membuat token JWT pendaftaran sementara untuk Google
+    // Membuat token JWT pendaftaran sementara untuk Google / Apple
     public String createRegistrationToken(String email, String fullName) {
+        return createRegistrationToken(email, fullName, null);
+    }
+
+    public String createRegistrationToken(String email, String fullName, String appleSub) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("email", email);
         claims.put("fullName", fullName);
+        if (appleSub != null) {
+            claims.put("appleSub", appleSub);
+        }
         claims.put("type", TokenType.REGISTRATION.name());
 
         long now = System.currentTimeMillis();
@@ -87,7 +94,7 @@ public class JwtService {
 
         return Jwts.builder()
                 .setClaims(claims)
-                .setSubject(email)
+                .setSubject(email != null ? email : (appleSub != null ? appleSub : "registration"))
                 .setIssuedAt(new Date())
                 .setExpiration(expiration)
                 .signWith(getSigningKey(), SignatureAlgorithm.HS512)

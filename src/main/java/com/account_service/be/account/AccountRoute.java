@@ -6,6 +6,7 @@ import com.account_service.be.annotation.CurrentUser;
 import com.account_service.be.annotation.RequireAuth;
 import com.account_service.be.annotation.RequirePermission;
 import com.account_service.be.annotation.RequireRole;
+import com.account_service.be.exception.BadRequestException;
 import com.account_service.be.utils.commons.CurrentUserDto;
 import com.account_service.be.utils.commons.PaginationResponseDto;
 import com.account_service.be.utils.commons.ResponseModel;
@@ -32,6 +33,8 @@ public class AccountRoute {
     private final AccountService accountService;
     @Value("${spring.security.oauth2.authorizationserver.client.google.client-id}")
     private String CLIENT_ID;
+    @Value("${spring.security.oauth2.authorizationserver.client.apple.client-id:dummy-apple-id}")
+    private String APPLE_CLIENT_ID;
     @Value("${app.frontend.url}")
     private String FRONTEND_URL;
     @Value("${app.base-url}")
@@ -79,6 +82,38 @@ public class AccountRoute {
                 "&prompt=select_account";
 
         response.sendRedirect(oauthUrl);
+    }
+
+    // ==========================================
+    // APPLE AUTHENTICATION ENDPOINTS (MODAL/POPUP)
+    // ==========================================
+
+    @PostMapping("/auth/apple")
+    public ResponseEntity<ResponseModel<Object>> loginApplePopup(@Valid @RequestBody AppleAuthRequestDto request) throws Exception {
+        return accountService.loginApplePopup(request);
+    }
+
+    @PostMapping("/auth/apple/register")
+    public ResponseEntity<ResponseModel<TokenResponseDto>> appleRegister(@Valid @RequestBody AppleRegisterRequestDto request) throws Exception {
+        return accountService.appleRegister(request.getRegistrationToken(), request.getPassword());
+    }
+
+    @PostMapping("/auth/apple/bind")
+    @RequireAuth
+    public ResponseEntity<ResponseModel<String>> bindApple(@CurrentUser CurrentUserDto currentUser, @Valid @RequestBody AppleAuthRequestDto request) throws Exception {
+        return accountService.bindApple(currentUser, request);
+    }
+
+    @DeleteMapping("/auth/apple/unbind")
+    @RequireAuth
+    public ResponseEntity<ResponseModel<String>> unbindApple(@CurrentUser CurrentUserDto currentUser) {
+        return accountService.unbindApple(currentUser);
+    }
+
+    @PostMapping("/auth/apple/events")
+    public ResponseEntity<ResponseModel<String>> handleAppleEvent(@RequestBody(required = false) AppleWebhookPayloadDto payloadDto, @RequestParam(name = "payload", required = false) String formPayload) {
+        String payload = (payloadDto != null && payloadDto.getPayload() != null) ? payloadDto.getPayload() : formPayload;
+        return accountService.handleAppleEvent(payload);
     }
 
 
