@@ -389,6 +389,11 @@ public class AccountService {
             throw new BadRequestException("Audience mismatch");
         }
 
+        String currentEmail = user.getEmail();
+        if (currentEmail == null || !currentEmail.toLowerCase().endsWith("@privaterelay.appleid.com")) {
+            throw new BadRequestException("Google account linking is only available for accounts with an Apple private relay email.");
+        }
+
         if (user.getGoogleSub() != null && user.getGoogleSub().equals(sub)) {
             return ResponseEntity.ok(new ResponseModel<>(true, "Google account is already linked", null));
         }
@@ -403,18 +408,13 @@ public class AccountService {
             throw new BadRequestException("An account with this Google email is already registered");
         }
 
-        // If the current primary email is a private relay email or empty, replace it with the verified Google email
-        if (user.getEmail() != null && user.getEmail().toLowerCase().endsWith("@privaterelay.appleid.com")) {
-            user.setEmail(email);
-        } else if (user.getEmail() == null || user.getEmail().isBlank()) {
-            user.setEmail(email);
-        }
-
+        // Replace the Apple private relay email with the verified Google email
+        user.setEmail(email);
         user.setGoogleSub(sub);
         user.setGoogleEmail(email);
         this.accountRepository.save(user);
 
-        return ResponseEntity.ok(new ResponseModel<>(true, "Google account linked successfully", null));
+        return ResponseEntity.ok(new ResponseModel<>(true, "Google account linked successfully and primary email updated", null));
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
