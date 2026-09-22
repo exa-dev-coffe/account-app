@@ -49,6 +49,12 @@ public class AccountRoute {
         return accountService.login(loginRequest.getEmail(), loginRequest.getPassword());
     }
 
+    @PostMapping("/auth/google/bind")
+    @RequireAuth
+    public ResponseEntity<ResponseModel<String>> bindGoogle(@CurrentUser CurrentUserDto currentUser, @Valid @RequestBody GoogleCodeRequestDto request) throws Exception {
+        return accountService.bindGoogle(currentUser, request);
+    }
+
     @GetMapping("/auth/google/callback")
     public void loginGoogleCallback(HttpServletResponse response, @Param("code") String code) throws Exception {
         try {

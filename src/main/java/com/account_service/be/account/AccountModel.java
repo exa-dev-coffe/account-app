@@ -47,4 +47,10 @@ public class AccountModel extends BaseModal {
 
     @Column(name = "apple_email", nullable = true)
     private String appleEmail;
+
+    @Column(name = "google_sub", nullable = true)
+    private String googleSub;
+
+    @Column(name = "google_email", nullable = true)
+    private String googleEmail;
 }

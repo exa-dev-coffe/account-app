@@ -20,6 +20,8 @@ public class UserResponseDto {
     private String roleName;
     private Boolean isAppleLinked;
     private String appleEmail;
+    private Boolean isGoogleLinked;
+    private String googleEmail;
     private Date createdAt;
     private Date updatedAt;
 }

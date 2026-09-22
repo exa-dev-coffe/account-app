@@ -20,4 +20,8 @@ public interface AccountProjection {
     String getAppleSub();
 
     String getAppleEmail();
+
+    String getGoogleSub();
+
+    String getGoogleEmail();
 }

@@ -262,6 +262,7 @@ public class AccountService {
         String email = (String) payload.get("email");
         boolean emailVerified = (boolean) payload.get("email_verified");
         String aud = (String) payload.get("aud");
+        String sub = payload.getSubject();
 
         if (!emailVerified) {
             throw new BadRequestException("Google email not verified");
@@ -271,17 +272,30 @@ public class AccountService {
             throw new BadRequestException("Audience mismatch");
         }
 
-        AccountModel user = this.accountRepository.findByEmail(email);
+        AccountModel user = null;
+        if (sub != null) {
+            user = this.accountRepository.findByGoogleSub(sub);
+        }
+        if (user == null && email != null) {
+            user = this.accountRepository.findByEmail(email);
+            if (user != null) {
+                user.setGoogleSub(sub);
+                user.setGoogleEmail(email);
+                this.accountRepository.save(user);
+            }
+        }
+
         if (user == null) {
             // User does not exist, require password setting/registration
             String name = (String) payload.get("name");
-            String registrationToken = jwtService.createRegistrationToken(email, name);
+            String registrationToken = jwtService.createRegistrationToken(email, name, null, sub);
 
             HashMap<String, Object> responseData = new HashMap<>();
             responseData.put("registerRequired", true);
             responseData.put("registrationToken", registrationToken);
             responseData.put("email", email);
             responseData.put("fullName", name);
+            responseData.put("googleSub", sub);
 
             ResponseModel<Object> response = new ResponseModel<>(true, "Google registration required", responseData);
             return ResponseEntity.status(HttpStatus.OK).body(response);
@@ -311,10 +325,18 @@ public class AccountService {
 
         String email = claims.get("email", String.class);
         String fullName = claims.get("fullName", String.class);
+        String googleSub = claims.get("googleSub", String.class);
 
         AccountModel existingUser = this.accountRepository.findByEmail(email);
         if (existingUser != null) {
             throw new BadRequestException("Email already registered");
+        }
+
+        if (googleSub != null) {
+            AccountModel existingGoogle = this.accountRepository.findByGoogleSub(googleSub);
+            if (existingGoogle != null) {
+                throw new BadRequestException("Google account already registered");
+            }
         }
 
         AccountModel user = new AccountModel();
@@ -324,6 +346,8 @@ public class AccountService {
         user.setFullName(fullName);
         user.setEmail(email);
         user.setPassword(PasswordUtils.hashPassword(password));
+        user.setGoogleSub(googleSub);
+        user.setGoogleEmail(email);
         user.setPhoto(null);
         user.setCreatedBy(null);
 
@@ -336,6 +360,49 @@ public class AccountService {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("Set-Cookie", cookie.toString())
                 .body(response);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRED)
+    public ResponseEntity<ResponseModel<String>> bindGoogle(CurrentUserDto currentUser, GoogleCodeRequestDto request) throws Exception {
+        if (currentUser == null) {
+            throw new NotAuthorizedException("Unauthorized");
+        }
+
+        AccountModel user = this.accountRepository.findByUserId(currentUser.getUserId());
+        if (user == null) {
+            throw new NotFoundException("User not found");
+        }
+
+        String idTokenString = GoogleTokenUtils.exchangeCodeForTokens(request.getCode(), CLIENT_ID, CLIENT_SECRET, "postmessage");
+        GoogleIdToken.Payload payload = GoogleTokenUtils.verifyGoogleToken(idTokenString, CLIENT_ID);
+
+        String email = (String) payload.get("email");
+        boolean emailVerified = (boolean) payload.get("email_verified");
+        String aud = (String) payload.get("aud");
+        String sub = payload.getSubject();
+
+        if (!emailVerified) {
+            throw new BadRequestException("Google email not verified");
+        }
+
+        if (!CLIENT_ID.equals(aud)) {
+            throw new BadRequestException("Audience mismatch");
+        }
+
+        if (user.getGoogleSub() != null && user.getGoogleSub().equals(sub)) {
+            return ResponseEntity.ok(new ResponseModel<>(true, "Google account is already linked", null));
+        }
+
+        AccountModel existingGoogle = this.accountRepository.findByGoogleSub(sub);
+        if (existingGoogle != null && existingGoogle.getUserId() != user.getUserId()) {
+            throw new BadRequestException("This Google account is already linked to another account");
+        }
+
+        user.setGoogleSub(sub);
+        user.setGoogleEmail(email);
+        this.accountRepository.save(user);
+
+        return ResponseEntity.ok(new ResponseModel<>(true, "Google account linked successfully", null));
     }
 
     @Transactional(Transactional.TxType.REQUIRED)
@@ -489,10 +556,14 @@ public class AccountService {
         }
 
         // Secondary unbind rule:
-        // User CAN unbind if they have a non-relay primary email and a password.
+        // User CAN unbind if:
+        // 1. Primary email is a regular non-relay email, OR
+        // 2. User has linked a Google account (google_sub != null)
         String email = user.getEmail();
-        if (email == null || email.toLowerCase().endsWith("@privaterelay.appleid.com")) {
-            throw new BadRequestException("Cannot unbind Apple account because your primary email is a private relay email. Please update your email to a regular email address first.");
+        boolean isPrivateRelay = (email == null || email.toLowerCase().endsWith("@privaterelay.appleid.com"));
+
+        if (isPrivateRelay && user.getGoogleSub() == null) {
+            throw new BadRequestException("Cannot unbind Apple account because your primary email is an Apple private relay email and no Google account is linked. Please link your Google account first before unbinding Apple.");
         }
 
         if (user.getPassword() == null || user.getPassword().isBlank()) {
@@ -623,6 +694,8 @@ public class AccountService {
         me.setRoleId(data.getRole().getRoleId());
         me.setIsAppleLinked(data.getAppleSub() != null);
         me.setAppleEmail(data.getAppleEmail());
+        me.setIsGoogleLinked(data.getGoogleSub() != null);
+        me.setGoogleEmail(data.getGoogleEmail());
         me.setPermissions(this.permissionCacheService.getRolePermissions(data.getRole().getRoleId()));
         ResponseModel<MeResponseDto> response = new ResponseModel<>(true, "User data found", me);
         return ResponseEntity.status(HttpStatus.OK)
@@ -950,6 +1023,8 @@ public class AccountService {
                 .roleName(user.getRole() != null ? user.getRole().getRoleName() : "")
                 .isAppleLinked(user.getAppleSub() != null)
                 .appleEmail(user.getAppleEmail())
+                .isGoogleLinked(user.getGoogleSub() != null)
+                .googleEmail(user.getGoogleEmail())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

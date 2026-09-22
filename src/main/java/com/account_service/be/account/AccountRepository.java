@@ -17,6 +17,10 @@ public interface AccountRepository extends JpaRepository<AccountModel, Integer>,
 
     AccountModel findByAppleEmail(String appleEmail);
 
+    AccountModel findByGoogleSub(String googleSub);
+
+    AccountModel findByGoogleEmail(String googleEmail);
+
     // Ambil entity langsung
     AccountModel findByUserId(Integer userId);
 

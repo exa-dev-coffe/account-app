@@ -15,5 +15,7 @@ public class MeResponseDto {
     private String photo;
     private Boolean isAppleLinked;
     private String appleEmail;
+    private Boolean isGoogleLinked;
+    private String googleEmail;
     private Map<String, PermissionActionDto> permissions;
 }
