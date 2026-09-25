@@ -41,6 +41,7 @@ import org.springframework.stereotype.Service;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -136,7 +137,26 @@ public class AccountService {
 
             AccountModel user = this.accountRepository.findByEmail(email);
             if (user == null) {
-                throw new Exception("Email not found");
+                String name = (String) payload.get("name");
+                if (name == null || name.isBlank()) {
+                    if (email != null && email.contains("@")) {
+                        name = email.substring(0, email.indexOf("@"));
+                    } else {
+                        name = "Google User";
+                    }
+                }
+                user = new AccountModel();
+                RoleModel role = new RoleModel();
+                role.setRoleId(2); // Customer
+                user.setRole(role);
+                user.setFullName(name);
+                user.setEmail(email);
+                user.setPassword(PasswordUtils.hashPassword(UUID.randomUUID().toString()));
+                user.setGoogleSub(payload.getSubject());
+                user.setGoogleEmail(email);
+                user.setPhoto(null);
+                user.setCreatedBy(null);
+                this.accountRepository.save(user);
             }
             // generate token for authorize call back temporary 5 minutes to exchange to real token
             String tokenTemporary = jwtService.createToken(user, TokenType.EXCHANGE);
@@ -147,7 +167,7 @@ public class AccountService {
 
             return tokenTemporary;
         } catch (Exception e) {
-            if (e.getMessage().equals("Email not found") || e.getMessage().equals("Invalid audience") || e.getMessage().equals("Email not verified") || e.getMessage().equals("Google login failed. Please try again.")) {
+            if (e.getMessage().equals("Invalid audience") || e.getMessage().equals("Email not verified") || e.getMessage().equals("Google login failed. Please try again.")) {
                 throw e;
             } else {
                 log.error("Error during Google login callback: {}", e.getMessage());
@@ -286,22 +306,31 @@ public class AccountService {
         }
 
         if (user == null) {
-            // User does not exist, require password setting/registration
             String name = (String) payload.get("name");
-            String registrationToken = jwtService.createRegistrationToken(email, name, null, sub);
+            if (name == null || name.isBlank()) {
+                if (email != null && email.contains("@")) {
+                    name = email.substring(0, email.indexOf("@"));
+                } else {
+                    name = "Google User";
+                }
+            }
 
-            HashMap<String, Object> responseData = new HashMap<>();
-            responseData.put("registerRequired", true);
-            responseData.put("registrationToken", registrationToken);
-            responseData.put("email", email);
-            responseData.put("fullName", name);
-            responseData.put("googleSub", sub);
+            user = new AccountModel();
+            RoleModel role = new RoleModel();
+            role.setRoleId(2); // Customer
+            user.setRole(role);
+            user.setFullName(name);
+            user.setEmail(email);
+            user.setPassword(PasswordUtils.hashPassword(UUID.randomUUID().toString()));
+            user.setGoogleSub(sub);
+            user.setGoogleEmail(email);
+            user.setPhoto(null);
+            user.setCreatedBy(null);
 
-            ResponseModel<Object> response = new ResponseModel<>(true, "Google registration required", responseData);
-            return ResponseEntity.status(HttpStatus.OK).body(response);
+            this.accountRepository.save(user);
         }
 
-        // User exists, login directly
+        // User exists or newly created, login directly
         TokenResponseDto data = this.createTokenResponse(user);
         this.refreshTokenService.addRefreshToken(data.getRefreshToken(), user);
         ResponseCookie cookie = this.createHttpOnlyCookie("refreshToken", data.getRefreshToken(), 7 * 24 * 60 * 60); // 7 days
@@ -451,17 +480,19 @@ public class AccountService {
                 fullName = "Apple User";
             }
 
-            String registrationToken = jwtService.createRegistrationToken(email, fullName, sub);
+            user = new AccountModel();
+            RoleModel role = new RoleModel();
+            role.setRoleId(2); // Customer
+            user.setRole(role);
+            user.setFullName(fullName);
+            user.setEmail(email != null && !email.isBlank() ? email : (sub + "@privaterelay.appleid.com"));
+            user.setPassword(PasswordUtils.hashPassword(UUID.randomUUID().toString()));
+            user.setAppleSub(sub);
+            user.setAppleEmail(email);
+            user.setPhoto(null);
+            user.setCreatedBy(null);
 
-            HashMap<String, Object> responseData = new HashMap<>();
-            responseData.put("registerRequired", true);
-            responseData.put("registrationToken", registrationToken);
-            responseData.put("email", email != null ? email : "");
-            responseData.put("fullName", fullName);
-            responseData.put("appleSub", sub);
-
-            ResponseModel<Object> response = new ResponseModel<>(true, "Apple registration required", responseData);
-            return ResponseEntity.status(HttpStatus.OK).body(response);
+            this.accountRepository.save(user);
         }
 
         TokenResponseDto data = this.createTokenResponse(user);
