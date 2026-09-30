@@ -1,6 +1,6 @@
 -- liquibase formatted sql
 
--- changeset developer:7
+-- changeset developer:7 validCheckSum:ANY
 -- Add pos (Point of Sale) feature and assign full permissions to default admin (role_id 1) and barista (role_id 3)
 
 INSERT INTO tm_features (feature_id, feature_key, feature_name, description)
@@ -19,3 +19,7 @@ ON CONFLICT (role_id, feature_id) DO NOTHING;
 
 SELECT setval(pg_get_serial_sequence('tm_features', 'feature_id'), COALESCE((SELECT MAX(feature_id) FROM tm_features), 1));
 SELECT setval(pg_get_serial_sequence('tm_role_features', 'id'), COALESCE((SELECT MAX(id) FROM tm_role_features), 1));
+
+-- rollback DELETE FROM tm_role_features WHERE feature_id = 12;
+-- rollback DELETE FROM tm_features WHERE feature_id = 12;
+
